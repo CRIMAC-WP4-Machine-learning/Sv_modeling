@@ -237,14 +237,14 @@ def plot_fish_school(_points, _orientations, ax=None):
         ax = fig.add_subplot(111, projection="3d")
     ax.quiver(_points[:, 0], _points[:, 1], _points[:, 2],
             _orientations[:, 0], _orientations[:, 1], _orientations[:, 2],
-            length=0.2, normalize=True)
+            length=0.3, normalize=True)
 
     # Equal aspect ratio
     max_range = np.array([
         _points[:, 0].max() - _points[:, 0].min(),
         _points[:, 1].max() - _points[:, 1].min(),
         _points[:, 2].max() - _points[:, 2].min()
-    ]).max() / 2.5
+    ]).max() / 2.0
 
     mid_x = (_points[:, 0].max() + _points[:, 0].min()) * 0.5
     mid_y = (_points[:, 1].max() + _points[:, 1].min()) * 0.5
@@ -253,6 +253,7 @@ def plot_fish_school(_points, _orientations, ax=None):
     ax.set_xlim(mid_x - 1.1*max_range, mid_x + 1.1*max_range)
     ax.set_ylim(mid_y - 1.1*max_range, mid_y + 1.1*max_range)
     ax.set_zlim(mid_z - 1.1*max_range, mid_z + 1.1*max_range)
+    ax.view_init(elev=25, azim=-60)
     ax.invert_zaxis()
     # plt.show()    
 
@@ -285,12 +286,12 @@ from src.FUNC_Gen_SweepSig_Explicit import func_Gen_SweepSig_Explicit
 
 #%%====================================================
 # Frequency interval (Hz)
-f1 = 1000.0
-f2 = 100000.0
+f1 = 10000.0
+f2 = 99000.0
 
 # 1: Define an idealized flat spectrum ============================
 # Frequency step for coherent simulation
-df = 1000.0
+df = 100.0
 
 freq_vec = np.arange(f1, f2 + df / 2, df)
 
@@ -401,111 +402,114 @@ while len(points) < N:
 
 points = np.asarray(points)
 
+#|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 # ---------------------------------------------------------
 # EK80-style split-beam angular coordinates
 # ---------------------------------------------------------
 
-slant_range = np.linalg.norm(points, axis=1)
-angle_alongship = np.rad2deg(np.arcsin(np.clip(points[:, 0] / slant_range, -1, 1)))
-angle_athwartship = np.rad2deg(np.arcsin(np.clip(points[:, 1] / slant_range, -1, 1)))
+# slant_range = np.linalg.norm(points, axis=1)
+# angle_alongship = np.rad2deg(np.arcsin(np.clip(points[:, 0] / slant_range, -1, 1)))
+# angle_athwartship = np.rad2deg(np.arcsin(np.clip(points[:, 1] / slant_range, -1, 1)))
 
-# True off-axis angle from the acoustic axis
-off_axis_angle = np.rad2deg(np.arccos(np.clip(points[:, 2] / slant_range, -1, 1)))
+# # True off-axis angle from the acoustic axis
+# off_axis_angle = np.rad2deg(np.arccos(np.clip(points[:, 2] / slant_range, -1, 1)))
 
-# Verification
-print("Number of targets:", len(points))
-print("Minimum range:", slant_range.min())
-print("Maximum range:", slant_range.max())
+# # Verification
+# print("Number of targets:", len(points))
+# print("Minimum range:", slant_range.min())
+# print("Maximum range:", slant_range.max())
 
-print("Alongship angle limits:", angle_alongship.min(), angle_alongship.max())
-print("Athwartship angle limits:", angle_athwartship.min(), angle_athwartship.max())
-print("Maximum off-axis angle:", off_axis_angle.max())
+# print("Alongship angle limits:", angle_alongship.min(), angle_alongship.max())
+# print("Athwartship angle limits:", angle_athwartship.min(), angle_athwartship.max())
+# print("Maximum off-axis angle:", off_axis_angle.max())
 
 
-#%% Plot simulated target positions
+# #%% Plot simulated target positions
 
-x = points[:, 0]
-y = points[:, 1]
-z = points[:, 2]
+# x = points[:, 0]
+# y = points[:, 1]
+# z = points[:, 2]
 
-slant_range = np.linalg.norm(points, axis=1)
+# slant_range = np.linalg.norm(points, axis=1)
 
-# EK80-style angular coordinates (degrees)
-angle_alongship = np.rad2deg(np.arcsin(np.clip(x / slant_range, -1, 1)))
-angle_athwartship = np.rad2deg(np.arcsin(np.clip(y / slant_range, -1, 1)))
+# # EK80-style angular coordinates (degrees)
+# angle_alongship = np.rad2deg(np.arcsin(np.clip(x / slant_range, -1, 1)))
+# angle_athwartship = np.rad2deg(np.arcsin(np.clip(y / slant_range, -1, 1)))
 
-fig = plt.figure(figsize=(16, 5))
-# ---------------------------------------------------------
-# 1. 3D target distribution
-# ---------------------------------------------------------
-ax1 = fig.add_subplot(131, projection="3d")
+# fig = plt.figure(figsize=(16, 5))
+# # ---------------------------------------------------------
+# # 1. 3D target distribution
+# # ---------------------------------------------------------
+# ax1 = fig.add_subplot(131, projection="3d")
 
-sc = ax1.scatter(x, y, z, c=z, cmap="viridis", s=15, alpha=0.8)
+# sc = ax1.scatter(x, y, z, c=z, cmap="viridis", s=15, alpha=0.8)
 
-ax1.set_xlabel("Alongship X (m)")
-ax1.set_ylabel("Athwartship Y (m)")
-ax1.set_zlabel("Depth Z (m)")
-ax1.set_title(f"3D target distribution (N={len(points)})")
+# ax1.set_xlabel("Alongship X (m)")
+# ax1.set_ylabel("Athwartship Y (m)")
+# ax1.set_zlabel("Depth Z (m)")
+# ax1.set_title(f"3D target distribution (N={len(points)})")
 
-# Equal spatial scaling
-max_span = max(np.ptp(x), np.ptp(y), np.ptp(z))
-half_span = max_span / 2
+# # Equal spatial scaling
+# max_span = max(np.ptp(x), np.ptp(y), np.ptp(z))
+# half_span = max_span / 2
 
-mid_x = (x.max() + x.min()) / 2
-mid_y = (y.max() + y.min()) / 2
-mid_z = (z.max() + z.min()) / 2
+# mid_x = (x.max() + x.min()) / 2
+# mid_y = (y.max() + y.min()) / 2
+# mid_z = (z.max() + z.min()) / 2
 
-ax1.set_xlim(mid_x - half_span, mid_x + half_span)
-ax1.set_ylim(mid_y - half_span, mid_y + half_span)
-ax1.set_zlim(mid_z + half_span, mid_z - half_span)
+# ax1.set_xlim(mid_x - half_span, mid_x + half_span)
+# ax1.set_ylim(mid_y - half_span, mid_y + half_span)
+# ax1.set_zlim(mid_z + half_span, mid_z - half_span)
 
-ax1.set_box_aspect((1, 1, 1))
+# ax1.set_box_aspect((1, 1, 1))
 
-fig.colorbar(sc, ax=ax1, shrink=0.65, label="Depth (m)")
+# fig.colorbar(sc, ax=ax1, shrink=0.65, label="Depth (m)")
 
-# ---------------------------------------------------------
-# 2. XY projection (looking down the beam)
-# ---------------------------------------------------------
-ax2 = fig.add_subplot(132)
+# # ---------------------------------------------------------
+# # 2. XY projection (looking down the beam)
+# # ---------------------------------------------------------
+# ax2 = fig.add_subplot(132)
 
-ax2.scatter(x, y, s=15, alpha=0.8)
+# ax2.scatter(x, y, s=15, alpha=0.8)
 
-# Beam boundary at mean slant range
-beam_radius = R * np.sin(beam_half_angle)
-t = np.linspace(0, 2*np.pi, 360)
+# # Beam boundary at mean slant range
+# beam_radius = R * np.sin(beam_half_angle)
+# t = np.linspace(0, 2*np.pi, 360)
 
-ax2.plot(beam_radius * np.cos(t), beam_radius * np.sin(t), "r--", linewidth=1.5, label="Beam boundary")
+# ax2.plot(beam_radius * np.cos(t), beam_radius * np.sin(t), "r--", linewidth=1.5, label="Beam boundary")
 
-ax2.set_xlabel("Alongship X (m)")
-ax2.set_ylabel("Athwartship Y (m)")
-ax2.set_title("XY projection")
-ax2.set_aspect("equal")
-ax2.grid(True)
-ax2.legend()
+# ax2.set_xlabel("Alongship X (m)")
+# ax2.set_ylabel("Athwartship Y (m)")
+# ax2.set_title("XY projection")
+# ax2.set_aspect("equal")
+# ax2.grid(True)
+# ax2.legend()
 
-# ---------------------------------------------------------
-# 3. EK80 alongship / athwartship angle plot
-# ---------------------------------------------------------
-ax3 = fig.add_subplot(133)
+# # ---------------------------------------------------------
+# # 3. EK80 alongship / athwartship angle plot
+# # ---------------------------------------------------------
+# ax3 = fig.add_subplot(133)
 
-ax3.scatter(angle_alongship,  angle_athwartship, s=15, alpha=0.8)
+# ax3.scatter(angle_alongship,  angle_athwartship, s=15, alpha=0.8)
 
-# Exact circular-cone boundary in split-beam coordinates
-t = np.linspace(0, 2*np.pi, 360)
-angle_boundary_al = np.rad2deg(np.arcsin(np.sin(beam_half_angle) * np.cos(t)))
-angle_boundary_at = np.rad2deg(np.arcsin(np.sin(beam_half_angle) * np.sin(t)))
+# # Exact circular-cone boundary in split-beam coordinates
+# t = np.linspace(0, 2*np.pi, 360)
+# angle_boundary_al = np.rad2deg(np.arcsin(np.sin(beam_half_angle) * np.cos(t)))
+# angle_boundary_at = np.rad2deg(np.arcsin(np.sin(beam_half_angle) * np.sin(t)))
 
-ax3.plot(angle_boundary_al, angle_boundary_at, "r--", linewidth=1.5, label="Beam boundary")
+# ax3.plot(angle_boundary_al, angle_boundary_at, "r--", linewidth=1.5, label="Beam boundary")
 
-ax3.set_xlabel("Alongship angle (deg)")
-ax3.set_ylabel("Athwartship angle (deg)")
-ax3.set_title("Target positions in beam")
-ax3.set_aspect("equal")
-ax3.grid(True)
-ax3.legend()
+# ax3.set_xlabel("Alongship angle (deg)")
+# ax3.set_ylabel("Athwartship angle (deg)")
+# ax3.set_title("Target positions in beam")
+# ax3.set_aspect("equal")
+# ax3.grid(True)
+# ax3.legend()
 
-plt.tight_layout()
-plt.show()
+# plt.tight_layout()
+# plt.show()
+#|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+
 
 # II. Orientaion of fish - Random unit vectors: 
 # "Theta" is the angle of projected vector on XY plane and X axis
@@ -638,7 +642,7 @@ print(f"Fish number density  : {rho_N:.3f} fish/m³")
 
 
 # Plot the fish school of N fish
-fig = plt.figure(figsize=(16, 5))
+fig = plt.figure(figsize=(12, 5))
 
 # 1. Theta histogram
 ax1 = fig.add_subplot(131)
