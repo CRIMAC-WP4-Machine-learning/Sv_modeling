@@ -287,20 +287,20 @@ from src.FUNC_Gen_SweepSig_Explicit import func_Gen_SweepSig_Explicit
 
 #%%====================================================
 # Frequency interval (Hz)
-f1 = 10000.0
-f2 = 99000.0
+# f1 = 10000.0
+# f2 = 99000.0
 
 # 1: Define an idealized flat spectrum ============================
 # Frequency step for coherent simulation
-df = 1000.0
+# df = 1000.0
 
-freq_vec = np.arange(f1, f2 + df / 2, df)
+# freq_vec = np.arange(f1, f2 + df / 2, df)
 
-# Flat spectral weighting
-ESD_vec = np.ones_like(freq_vec)
+# # Flat spectral weighting
+# ESD_vec = np.ones_like(freq_vec)
 
-# Integral of the spectral weighting
-tips_0 = np.trapezoid(ESD_vec, freq_vec)
+# # Integral of the spectral weighting
+# tips_0 = np.trapezoid(ESD_vec, freq_vec)
 
 
 # 2: Realistic FM simulation =====================
@@ -648,17 +648,26 @@ print(f"Fish number density  : {rho_N:.3f} fish/m³")
 
 N = len(points)
 
-sigma_bs_P_fish = np.zeros(N)
+# Original frequency vector from the scattering database
+df_csv = pd.read_csv(
+    os.path.join(database_dir, df_database.iloc[0]["filename"])
+)
+
+freq_vec = df_csv["Freq_kHz"].to_numpy(dtype=float) * 1000
+
+# Store sigma_bs(f) for every fish
+sigma_bs_fish = np.zeros((N, len(freq_vec)))
+
+# Coherent backscattering
 p_far = np.zeros(len(freq_vec), dtype=complex)
 R0 = 1
+
 
 for ii in range(0, len(points)):
     point_ii = points[ii]
     orientations_ii = orientations[ii]
 
-    Incident_Angle_ii = Get_Angle(
-        Observation_point, point_ii, orientations_ii
-    )
+    Incident_Angle_ii = Get_Angle(Observation_point, point_ii, orientations_ii)
 
     Length = 0.0
 
@@ -678,83 +687,71 @@ for ii in range(0, len(points)):
     # Flat-spectrum averaged sigma_bs for fish ii
     # ---------------------------------------------------
 
-    freq = np.asarray(freq, dtype=float)  # kHz
+    freq_Hz = np.asarray(freq, dtype=float) * 1000
     f_bs_ii = np.asarray(f_bs_ii, dtype=complex)
-    freq_Hz = freq * 1000
 
-    # Interpolate complex scattering amplitude onto the 100 Hz grid
-    f_bs_interp = (
-        np.interp(freq_vec, freq_Hz, f_bs_ii.real)
-        + 1j * np.interp(freq_vec, freq_Hz, f_bs_ii.imag)
-    )
+    # Verify that all fish have the same original frequency grid
+    if not np.allclose(freq_Hz, freq_vec, rtol=0, atol=1e-6):
+        raise ValueError("Different frequency grids in scattering database")
 
-    # Flat-spectrum mean scattering cross section
-    sigma_bs_ii = np.abs(f_bs_interp)**2
+    # Store scattering cross section across all frequencies
+    sigma_bs_fish[ii, :] = np.abs(f_bs_ii)**2
 
-    sigma_bs_P_fish[ii] = (
-        np.trapezoid(sigma_bs_ii, freq_vec)
-        / (f2 - f1)
-    )
-
-    # Coherent scattering contribution
-    Distance = np.linalg.norm(Observation_point - point_ii)
-
-    p_far_ii = (
-        f_bs_interp / Distance**2
-        * np.exp(-1j * 4*np.pi * freq_vec * Distance / 1500)
-    )
-
+    Distance = np.linalg.norm(Observation_point-point_ii)
+    # print('Distance: ', Distance)
+    p_far_ii = (f_bs_ii/(Distance*Distance)) * np.exp(-1j*2*np.pi*(1000*freq/1500)*(2*Distance))  # k = 2*pi*f/c
+    
     p_far = p_far + p_far_ii
+
 
 #%% Calculate number density using idealized flat spectrum
 
-sigma_bs_P_mean = np.mean(sigma_bs_P_fish)
-
+# Calculate svf over all frequencies
 R = School_Mean_range
 V_GV = V
+svf = np.abs(p_far)**2 * R**4 / V_GV
 
-# tips_GV_coh_normalized = (
-#     R0**2
-#     * np.trapezoid(np.abs(p_far)**2, freq_vec) 
-#     / (f2 - f1)
-# )
 
-# n_b_est_acoustic = (
-#     tips_GV_coh_normalized * R**4
-#     / (V_GV * R0**2 * sigma_bs_P_mean)
-# )
+#%% Number density estimation for selected frequency band
 
-# p_far_scaled = p_far * (R**2)/((V_GV * R0**2)**0.5)
-# svf = np.abs(p_far_scaled)**2
+f1 = 38000.0
+f2 = 70000.0
 
-svf = (np.abs(p_far)**2)*(R**4)/(V_GV * R0**2)
+mask = (freq_vec >= f1) & (freq_vec <= f2)
+freq_band = freq_vec[mask]
 
-tips_GV_coh_normalized = (
-    R0**2
-    * np.trapezoid(svf, freq_vec) 
-    / (f2 - f1)
+B = freq_band[-1] - freq_band[0]
+
+# Band-averaged coherent volume backscattering
+sv_mean = np.trapezoid(svf[mask], freq_band) / B
+
+# Band-averaged sigma_bs of each fish
+sigma_bs_P_fish = (
+    np.trapezoid(sigma_bs_fish[:, mask], freq_band, axis=1) / B
 )
 
-n_b_est_acoustic = (tips_GV_coh_normalized / sigma_bs_P_mean)
+sigma_bs_P_mean = np.mean(sigma_bs_P_fish)
 
+# Coherent density
+n_b_est_acoustic = sv_mean / sigma_bs_P_mean
 
-n_b_true = N / V_GV
-
+# Incoherent density
 R_i = np.linalg.norm(points - Observation_point, axis=1)
 
-tips_GV_incoh_normalized = (
-    R0**2 * np.sum(sigma_bs_P_fish / R_i**4)
+sv_incoh_mean = (
+    R**4 / V_GV
+    * np.sum(sigma_bs_P_fish / R_i**4)
 )
 
-n_b_incoh = (
-    tips_GV_incoh_normalized * R**4
-    / (V_GV * R0**2 * sigma_bs_P_mean)
-)
+n_b_incoh = sv_incoh_mean / sigma_bs_P_mean
 
-print(f"Coherent density acoustics    : {n_b_est_acoustic:.4f} fish/m³")
-print(f"Incoherent density : {n_b_incoh:.4f} fish/m³")
-print(f"True density       : {n_b_true:.4f} fish/m³")
-print(f"n_b_acoustic/n_b_true: {n_b_est_acoustic/n_b_true:.4f}")
+# True density
+n_b_true = N / V_GV
+
+print(f"Coherent density : {n_b_est_acoustic:.4f} fish/m³")
+print(f"Incoherent density: {n_b_incoh:.4f} fish/m³")
+print(f"True density     : {n_b_true:.4f} fish/m³")
+print(f"Coherent/True    : {n_b_est_acoustic/n_b_true:.4f}")
 
 
 #%% ====================================================
