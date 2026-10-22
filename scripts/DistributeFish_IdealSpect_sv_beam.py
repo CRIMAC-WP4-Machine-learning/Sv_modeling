@@ -21,6 +21,7 @@ Fish incidence angle:
 '''
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FormatStrFormatter
 from mpl_toolkits.mplot3d import Axes3D
 import os
 import sys
@@ -253,7 +254,7 @@ def plot_fish_school(_points, _orientations, ax=None):
     ax.set_xlim(mid_x - 1.1*max_range, mid_x + 1.1*max_range)
     ax.set_ylim(mid_y - 1.1*max_range, mid_y + 1.1*max_range)
     ax.set_zlim(mid_z - 1.1*max_range, mid_z + 1.1*max_range)
-    ax.view_init(elev=25, azim=-60)
+    ax.view_init(elev=12, azim=-55)
     ax.invert_zaxis()
     # plt.show()    
 
@@ -291,7 +292,7 @@ f2 = 99000.0
 
 # 1: Define an idealized flat spectrum ============================
 # Frequency step for coherent simulation
-df = 100.0
+df = 1000.0
 
 freq_vec = np.arange(f1, f2 + df / 2, df)
 
@@ -603,7 +604,7 @@ rho_N = len(points) / V
 
 print(f"Number of fish       : {len(points)}")
 print(f"Aggregate volume     : {V:.3f} m³")
-print(f"Approximate volume   : {V_approx:.3f} m³")
+# print(f"Approximate volume   : {V_approx:.3f} m³")
 print(f"Fish number density  : {rho_N:.3f} fish/m³")
 
 
@@ -638,33 +639,6 @@ print(f"Fish number density  : {rho_N:.3f} fish/m³")
 
 # orientations = np.stack((x, y, z), axis=1)  # shape (N, 3)
 # orientations /= np.linalg.norm(orientations, axis=1)[:, np.newaxis]  # normalize
-#%% ====================================================
-
-
-# Plot the fish school of N fish
-fig = plt.figure(figsize=(12, 5))
-
-# 1. Theta histogram
-ax1 = fig.add_subplot(131)
-ax1.hist(np.degrees(theta), bins=30, density=True, alpha=0.6, color="skyblue", edgecolor="black")
-ax1.set_xlabel(r"$\theta$ (deg)", fontsize=12)
-ax1.set_ylabel("Probability density", fontsize=12)
-ax1.set_title("Azimuth distribution")
-
-# 2. Phi histogram
-ax2 = fig.add_subplot(132)
-ax2.hist(np.degrees(phi), bins=30, density=True, alpha=0.6, color="skyblue", edgecolor="black")
-ax2.set_xlabel(r"$\phi$ (deg)", fontsize=12)
-ax2.set_ylabel("Probability density", fontsize=12)
-ax2.set_title("Polar angle distribution")
-
-# 3. Fish school in 3D
-ax3 = fig.add_subplot(133, projection="3d")
-plot_fish_school(points, orientations, ax3)
-
-plt.tight_layout()
-
-plt.show() 
 
 # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 # Frequency interval (kHz, matching freq from database)
@@ -736,19 +710,33 @@ for ii in range(0, len(points)):
 
 sigma_bs_P_mean = np.mean(sigma_bs_P_fish)
 
-tips_GV_coh_normalized = (
-    R0**2
-    * np.trapezoid(np.abs(p_far)**2, freq_vec)
-    / (f2 - f1)
-)
-
 R = School_Mean_range
 V_GV = V
 
-n_b_est_acoustic = (
-    tips_GV_coh_normalized * R**4
-    / (V_GV * R0**2 * sigma_bs_P_mean)
+# tips_GV_coh_normalized = (
+#     R0**2
+#     * np.trapezoid(np.abs(p_far)**2, freq_vec) 
+#     / (f2 - f1)
+# )
+
+# n_b_est_acoustic = (
+#     tips_GV_coh_normalized * R**4
+#     / (V_GV * R0**2 * sigma_bs_P_mean)
+# )
+
+# p_far_scaled = p_far * (R**2)/((V_GV * R0**2)**0.5)
+# svf = np.abs(p_far_scaled)**2
+
+svf = (np.abs(p_far)**2)*(R**4)/(V_GV * R0**2)
+
+tips_GV_coh_normalized = (
+    R0**2
+    * np.trapezoid(svf, freq_vec) 
+    / (f2 - f1)
 )
+
+n_b_est_acoustic = (tips_GV_coh_normalized / sigma_bs_P_mean)
+
 
 n_b_true = N / V_GV
 
@@ -766,4 +754,59 @@ n_b_incoh = (
 print(f"Coherent density acoustics    : {n_b_est_acoustic:.4f} fish/m³")
 print(f"Incoherent density : {n_b_incoh:.4f} fish/m³")
 print(f"True density       : {n_b_true:.4f} fish/m³")
-print(f"Coherent/Incoherent: {tips_GV_coh_normalized/tips_GV_incoh_normalized:.4f}")
+print(f"n_b_acoustic/n_b_true: {n_b_est_acoustic/n_b_true:.4f}")
+
+
+#%% ====================================================
+
+
+# Plot the fish school of N fish
+fig = plt.figure(figsize=(12, 5))
+
+
+# 1. Theta histogram
+ax1 = fig.add_subplot(231)
+pos = ax1.get_position()
+ax1.set_position([pos.x0-0.05, pos.y0 + 0.05, pos.width * 0.8, pos.height * 0.5])
+ax1.hist(np.degrees(theta), bins=30, density=False, alpha=0.6, color="skyblue", edgecolor="black")
+ax1.set_xlabel(r"$\theta$ (deg)", fontsize=12)
+ax1.set_ylabel("Number of fish", fontsize=12)
+ax1.set_title("Azimuth distribution")
+
+# 2. Phi histogram
+ax2 = fig.add_subplot(232)
+pos = ax2.get_position()
+ax2.set_position([pos.x0-0.05, pos.y0 + 0.05, pos.width * 0.8, pos.height * 0.5])
+ax2.hist(np.degrees(phi), bins=30, density=False, alpha=0.6, color="skyblue", edgecolor="black")
+ax2.set_xlabel(r"$\phi$ (deg)", fontsize=12)
+ax2.set_ylabel("Number of fish", fontsize=12)
+ax2.set_title("Polar angle distribution")
+
+# 3. Fish school in 3D
+ax3 = fig.add_subplot(233, projection="3d")
+pos = ax3.get_position()
+ax3.set_position([pos.x0-0.15, pos.y0-0.5, pos.width*2.6, pos.height*2.8])
+plot_fish_school(points, orientations, ax3)
+ax3.set_xlabel("X (m)", fontsize=12)
+ax3.set_ylabel("Y (m)", fontsize=12)
+ax3.set_zlabel("Z (m)", fontsize=12)
+
+ax3.tick_params(axis="both", labelsize=10)
+ax3.tick_params(axis="z", labelsize=10)
+
+# 3. sv(f)
+ax4 = fig.add_subplot(234)
+pos = ax4.get_position()
+ax4.set_position([pos.x0-0.04, pos.y0 - 0.00, pos.width * 2.1, pos.height * 0.8])
+ax4.plot(freq_vec/1000,svf, color =[0,0,0])
+ax4.set_xlabel("Frequency (kHz)", fontsize=12)
+ax4.set_ylabel(r'$s_v\;(\mathrm{m}^2\,\mathrm{m}^{-3})$', fontsize=12)
+
+
+ax1.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+ax2.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+# plt.tight_layout()
+
+fig.suptitle(rf"Frequency interval: $[{f1/1e3:.1f},\,{f2/1e3:.1f}]$ kHz", fontsize=14)
+
+plt.show() 
