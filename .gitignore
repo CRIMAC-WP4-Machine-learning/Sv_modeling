@@ -8,3 +8,16 @@ wheels/
 
 # Virtual environments
 .venv
+
+# IDE
+.idea/
+.vscode/
+
+# Windows download markers
+*:Zone.Identifier
+
+# Generated figures and results
+outputs/
+
+# Input data (stored outside git; see the Data section in README.md)
+data/

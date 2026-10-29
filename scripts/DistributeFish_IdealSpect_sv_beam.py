@@ -1,4 +1,4 @@
-'''
+"""
 Coordinate system: +X alongship, +Y athwartship, +Z downward (beam axis).
 
 Target position angles (EK80-style direction-cosine convention):
@@ -18,273 +18,41 @@ Fish orientation angles (spherical coordinates):
 Fish incidence angle:
   Angle between fish longitudinal axis and acoustic direction.
   0° = end-on, 90° = broadside (for a symmetric fish model).
-'''
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.ticker import FormatStrFormatter
-from mpl_toolkits.mplot3d import Axes3D
+
+Run from anywhere, e.g. from the repository root:
+    uv run python scripts/DistributeFish_IdealSpect_sv_beam.py
+
+Figures are written to outputs/.
+"""
 import os
-import sys
-import glob
+
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
-import re
-from scipy.signal import savgol_filter
+from matplotlib.ticker import FormatStrFormatter
 
-# from src.inversion.liquid_ps import inverse_frequency_response
+from sv_modeling.database import (
+    Extract_database_metadata,
+    Find_closestfile_in_database,
+    func_get_frq_TS_fbs_Dict,
+)
+from sv_modeling.geometry import Get_Angle
+from sv_modeling.paths import FEMBEM_DIR, TS_DATABASE_150HZ_DIR, output_path
+from sv_modeling.plotting import plot_fish_school
+from sv_modeling.signals import func_Gen_SweepSig_Explicit  # noqa: F401 (used in commented-out block)
+from sv_modeling.spectrum import ESD_BKH  # noqa: F401 (used in commented-out block)
 
-#%% funcs -----------------------------------
-def Get_Angle(_p0, _p1, _u_p1):
-    ''' 
-    Returns the angle between a vector connecting p1 to p0 and the vector u_p1 originating from p1
-    Inputs:
-    _p0 = np.array([x0, y0, z0])  observation point (coordinate of echosounder)
-    _p1 = np.array([x1, y1, z1])  location of fish (coordinate of fish)
-    _u_p1 = np.array([1.0, 1.0, 0.0])  #  (orientation at p1, unit vector) Orientation of the fish
+#%% Directories and databases
+# Database directory containing csv files with TS(f) and f_bs(f):
+database_dir = TS_DATABASE_150HZ_DIR
+print('database_dir: ', database_dir)
 
-    Outputs:
-    
-    Example:
-    # ======================================================
-    # Angle between "u" the unit vector of point "p1" and vector connecting "p0" to "p1":
-    print('points[0], orientations[0]: ', points[0], orientations[0])
+FEM_BEM_dir = FEMBEM_DIR
+print('FEM_BEM_dir: ', FEM_BEM_dir)
 
-    p0 = np.array([0.0, 0.0, 5.0]) 
-    p1 = np.array([0.0, 0.0, 0.0])
-    u_p1 = np.array([1.0, 0.0, 0.0])  # orientation at p1
-    Get_Angle(p0, p1, u_p1)
-
-    print('np.linalg.norm(p1-p0): ', np.linalg.norm(p1-p0))
-    '''
-    # _p0 = np.array([0.0, 0.0, 5.0]) 
-    # _p1 = np.array([0.0, 0.0, 0.0])
-    # _u_p1 = np.array([1.0, 1.0, 0.0])  # orientation at p1
-    
-
-    _u_p1_norm = np.linalg.norm(_u_p1)  # unit vector (orientation at p1)
-
-
-    v = _p0 - _p1
-    v_norm = np.linalg.norm(v)
-
-    # Ensure v is not zero-length
-    if v_norm > 0:
-        cos_theta = np.dot(_u_p1, v) / (v_norm*_u_p1_norm)
-        # Clip for numerical stability
-        cos_theta = np.clip(cos_theta, -1.0, 1.0)
-        theta_rad = np.arccos(cos_theta)
-        theta_deg = np.degrees(theta_rad)
-        # print(f"Angle: {theta_deg:.2f} degrees")
-    else:
-        print("Warning: p0 and p1 are the same point.")
-    
-    Incident_Angle_deg = 90 - np.abs(90-theta_deg)
-    return Incident_Angle_deg
-
-def Extract_database_metadata(_Dir):
-    '''
-    Reads all .csv files in _Dir and returns the metadata as dataframe including file names, a, b, depth, Incident angle, 
-    and lengths from filenames
-    '''
-    csv_files = glob.glob(os.path.join(_Dir, '*.csv'))
-
-    # Regex pattern to extract parameters from filename
-    pattern = r"a_(?P<a>[0-9.]+)_b_(?P<b>[0-9.]+).*?_IncAngle_(?P<IncAngle>[0-9.]+)_depth_(?P<depth>[0-9.]+)_length_(?P<length>[0-9.]+)"
-
-    # Collect data from filenames
-    records = []
-
-    for file in csv_files:
-        match = re.search(pattern, file)
-        if match:
-            record = {
-                'filename': os.path.basename(file),
-                'a': float(match.group('a')),
-                'b': float(match.group('b')),
-                'IncAngle': float(match.group('IncAngle')),
-                'depth': float(match.group('depth')),
-                'length': float(match.group('length'))
-            }
-            records.append(record)
-
-    # Create DataFrame
-    _df = pd.DataFrame(records)
-
-    # View it
-    # print(_df.head())
-
-    return _df
-
-def Find_closestfile_in_database(_df_database, _Depth, _Length, _IncAngl):
-    """
-    Reads the CSV file for the corresponding fish length, depth, and incident angle.
-    Output:
-        Returns the file in database (modeled .csv files) closest to the size of fish at "point_ii" with "orientation_ii".
-    """
-    # Make a copy to avoid modifying the original DataFrame
-    df_db = _df_database.copy()
-
-    # Step 1: Closest depth
-    df_db['depth_diff'] = np.abs(df_db['depth'] - _Depth)
-    min_depth_diff = df_db['depth_diff'].min()
-    depth_filtered = df_db[df_db['depth_diff'] == min_depth_diff].copy()
-
-    # Step 2: Closest length >= _Length
-    larger_or_equal = depth_filtered[depth_filtered['length'] >= _Length]
-    if not larger_or_equal.empty:
-        selected_length = larger_or_equal['length'].min()
-        length_filtered = larger_or_equal[larger_or_equal['length'] == selected_length].copy()
-    else:
-        # Fallback: pick overall closest length
-        depth_filtered['length_diff'] = np.abs(depth_filtered['length'] - _Length)
-        min_length_diff = depth_filtered['length_diff'].min()
-        length_filtered = depth_filtered[depth_filtered['length_diff'] == min_length_diff].copy()
-
-    # Step 3: Closest incident angle
-    length_filtered['angle_diff'] = np.abs(length_filtered['IncAngle'] - _IncAngl)
-    min_angle_diff = length_filtered['angle_diff'].min()
-    final_selection = length_filtered[length_filtered['angle_diff'] == min_angle_diff]
-
-    # print('final_selection: ', final_selection)
-
-    # Take the first row if multiple matches
-    df_closest_row = final_selection.iloc[0]
-    dict_closest_row = df_closest_row.to_dict()
-
-    return dict_closest_row
-
-
-# def func_frq_TS_from_Dict(_Dir, _Inp_Dict, _Lfish, _f_vec):
-#     # print('_Inp_Dict :', _Inp_Dict)
-#     # print(os.path.join(_Dir, _Inp_Dict['filename']))
-#     df_csv = pd.read_csv(os.path.join(_Dir, _Inp_Dict['filename']))
-#     print(df_csv.columns)
-
-
-#     L0 = _Inp_Dict['length']
-    
-#     # print(' type(df_csv): ', type(df_csv))
-#     freq_vec0 = df_csv['Freq_kHz']
-#     TS_vec0 = df_csv['TS']
-#     Fbs_vec0 = df_csv['f_bs']
-
-#     # Ensure f_bs is complex. That is if f_bs is stored as string (e.g., "1+2j"), convert it to complex
-#     if not np.iscomplexobj(Fbs_vec0):
-#         Fbs_vec0 = Fbs_vec0.astype(complex)
-
-#     ScaleFactor=(L0/_Lfish)**(1/3) # !!!!! Req0/Req = L0/_Lfish: Note that since in the current version, 
-#                             #           "b" the minor axis of prolate spheroid is indepndent of L
-#     plt.plot(freq_vec0, TS_vec0)
-#     print('ScaleFactor: >>>>>>>>>>>>>>>>>>>>>>', ScaleFactor)
-    
-#     def Func_rescale_TS(_t_vec, _Sig, _factor):
-#         _t_vec = np.asarray(_t_vec)   # Convert pandas Series or list to ndarray
-#         _t_vec = np.insert(_t_vec, 0, 0.0)        # Insert 0.0 at the beginning
-
-#         _Sig = np.asarray(_Sig)  # Convert pandas Series or list to ndarray
-#         _Sig = np.insert(_Sig, 0, 1E-200)        # Insert 0.0 at the beginning
-
-#         Scaled_t = _factor * _t_vec
-#         Sig_interpolated = np.interp(_f_vec, Scaled_t, _Sig)
-#         ScaledSig = Sig_interpolated + 20 * np.log10(1 / _factor)
-
-#         return _f_vec, ScaledSig
-    
-#     def Func_rescale_Fbs(_t_vec, _Sig, _factor):
-#         _t_vec = np.asarray(_t_vec)   # Convert pandas Series or list to ndarray
-#         _t_vec = np.insert(_t_vec, 0, 0.0)        # Insert 0.0 at the beginning
-#         _Sig = np.asarray(_Sig)
-#         _Sig = np.insert(_Sig, 0, 1E-200)        # Insert 0.0 at the beginning
-
-#         Scaled_t = _factor * _t_vec
-#         Sig_interpolated = np.interp(_f_vec, Scaled_t, _Sig)
-#         ScaledSig = Sig_interpolated  * 1/_factor
-
-#         return ScaledSig
-
-    
-#     [freq_vec, TS_vec] = Func_rescale_TS(freq_vec0, TS_vec0, ScaleFactor)
-#     Real_f_bs = Func_rescale_Fbs(freq_vec0, np.real(Fbs_vec0), ScaleFactor)
-#     Imag_f_bs = Func_rescale_Fbs(freq_vec0, np.imag(Fbs_vec0), ScaleFactor)
-#     scaled_f_bs = Real_f_bs + 1j * Imag_f_bs
-
-#     return freq_vec, TS_vec, scaled_f_bs
-
-def func_get_frq_TS_fbs_Dict(_Dir, _Inp_Dict, _Lfish):
-    '''
-    _Dir: directory of modeled TS and fbs as function of frequency
-    _Inp_Dict: is the output of function "Find_closestfile_in_database" which contains filename in _Dir which is 
-               closest to _Lfish at a given Depth and tilt angle 
-    '''
-    df_csv = pd.read_csv(os.path.join(_Dir, _Inp_Dict['filename']))
-    # TS_file = 'ts_vs_freq_loop_herring_a_0.01000_b_0.00400_f1_0_f2_100_rhos_7.34_IncAngle_90_depth_50_length_0.0_iterRef_LU.csv'
-    # df_csv = pd.read_csv(os.path.join(_Dir, TS_file))
-    # print(df_csv.columns)
-
-    # print(' type(df_csv): ', type(df_csv))
-    freq_vec0 = df_csv['Freq_kHz']
-    TS_vec0 = df_csv['TS']
-    Fbs_vec0 = df_csv['f_bs']
-    
-    # Ensure f_bs is complex. That is if f_bs is stored as string (e.g., "1+2j"), convert it to complex
-    if not np.iscomplexobj(Fbs_vec0):
-        Fbs_vec0 = Fbs_vec0.astype(complex)
-
-    return freq_vec0, TS_vec0, Fbs_vec0
-
-
-def plot_fish_school(_points, _orientations, ax=None):
-    if ax is None:
-        fig = plt.figure(figsize=(8, 6))
-        ax = fig.add_subplot(111, projection="3d")
-    ax.quiver(_points[:, 0], _points[:, 1], _points[:, 2],
-            _orientations[:, 0], _orientations[:, 1], _orientations[:, 2],
-            length=0.3, normalize=True)
-
-    # Equal aspect ratio
-    max_range = np.array([
-        _points[:, 0].max() - _points[:, 0].min(),
-        _points[:, 1].max() - _points[:, 1].min(),
-        _points[:, 2].max() - _points[:, 2].min()
-    ]).max() / 2.0
-
-    mid_x = (_points[:, 0].max() + _points[:, 0].min()) * 0.5
-    mid_y = (_points[:, 1].max() + _points[:, 1].min()) * 0.5
-    mid_z = (_points[:, 2].max() + _points[:, 2].min()) * 0.5
-
-    ax.set_xlim(mid_x - 1.1*max_range, mid_x + 1.1*max_range)
-    ax.set_ylim(mid_y - 1.1*max_range, mid_y + 1.1*max_range)
-    ax.set_zlim(mid_z - 1.1*max_range, mid_z + 1.1*max_range)
-    ax.view_init(elev=12, azim=-55)
-    ax.invert_zaxis()
-    # plt.show()    
-
-#%% Initialize Directories and Databases:
-
-# 1. Get the directory where the script is located
-ProjectDIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ProjectDIR)
-
-print('ProjectDIR: ',ProjectDIR)
-# sys.path.insert(0, ProjectDIR)
-
-# 2. Calculate the parent directory (navigates two directories up.)
-ParentDIR = os.path.abspath(os.path.join(os.getcwd()))
-print('Parent DIR: >>> ', ParentDIR)
-
-# Database Directory containing csv files with TS(f) and F_bs(f):
-database_dir = os.path.join(ParentDIR, 'model_results','model_backscatter_150Hz/')
-print('database_dir: ',database_dir)
-
-FEM_BEM_dir = os.path.join(ParentDIR, 'FEM_BEM/')
-print('FEM_BEM_dir: ',FEM_BEM_dir)
-# Create database info from csv files in database_dir. df_database has filename, target (fish) length, incident angle, depth,
-#  prolate spheroid dimensions of swimblader "a, b", 
+# df_database has filename, target (fish) length, incident angle, depth and
+# prolate spheroid dimensions of the swimbladder "a, b"
 df_database = Extract_database_metadata(database_dir)
-
-from src.Func_FEMBEM import func_FEM_BEM
-from src.FUNC_ESD_Bkh import ESD_BKH
-from src.FUNC_Gen_SweepSig_Explicit import func_Gen_SweepSig_Explicit
-
 #%%====================================================
 # Frequency interval (Hz)
 # f1 = 10000.0
@@ -783,7 +551,7 @@ ax2.set_title("Polar angle distribution")
 ax3 = fig.add_subplot(233, projection="3d")
 pos = ax3.get_position()
 ax3.set_position([pos.x0-0.15, pos.y0-0.5, pos.width*2.6, pos.height*2.8])
-plot_fish_school(points, orientations, ax3)
+plot_fish_school(points, orientations, ax3, length=0.3, margin=1.1, view=(12, -55), invert_z=True)
 ax3.set_xlabel("X (m)", fontsize=12)
 ax3.set_ylabel("Y (m)", fontsize=12)
 ax3.set_zlabel("Z (m)", fontsize=12)
@@ -806,4 +574,5 @@ ax2.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
 
 fig.suptitle(rf"Frequency interval: $[{f1/1e3:.1f},\,{f2/1e3:.1f}]$ kHz", fontsize=14)
 
-plt.show() 
+plt.savefig(output_path("sv_beam_summary.png"), dpi=300, bbox_inches="tight")
+plt.show()
