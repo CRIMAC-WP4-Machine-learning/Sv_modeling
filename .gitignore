@@ -5,6 +5,7 @@ build/
 dist/
 wheels/
 *.egg-info
+*:Zone.Identifier
 
 # Virtual environments
 .venv
