@@ -1,4 +1,3 @@
-
 # Sv_modeling
 
 Python-based simulation of acoustic backscattering from fish aggregations, including coherent and incoherent summation of individual fish scattering signals and estimation of the volume backscattering coefficient ($s_v$).
@@ -7,14 +6,26 @@ Python-based simulation of acoustic backscattering from fish aggregations, inclu
 
 ```text
 Sv_modeling/
-├── src/                  # Source code
-├── scripts/              # Simulation and analysis scripts
-├── FEM_BEM/              # Numerical scattering model data
-├── model_results/        # Simulation results
-├── pyproject.toml        # Project configuration and dependencies
-├── requirements.txt      # Python dependencies
-├── uv.lock               # Locked dependency versions
-└── README.md             # Project documentation
+├── src/sv_modeling/          # Installable package (shared code)
+│   ├── database.py           # TS(f)/f_bs(f) database: metadata, closest-file lookup, loading
+│   ├── fembem.py             # Reader for FEM/BEM (COMSOL) TS exports
+│   ├── geometry.py           # Incident angle between fish axis and echosounder
+│   ├── paths.py              # Repository paths (data/, outputs/)
+│   ├── plotting.py           # 3-D fish-school plot
+│   ├── signals.py            # Transmit sweep signal
+│   └── spectrum.py           # Energy spectral density
+├── scripts/                  # Simulation and analysis entry points
+│   ├── DistributeFish_sv.py                   # Random school, coherent superposition
+│   ├── DistributeFish_Pbs_compareCOMSOL.py    # Fixed targets vs FEM/BEM solution
+│   └── DistributeFish_IdealSpect_sv_beam.py   # Fish in a beam: coherent/incoherent s_v and density
+├── data/                     # Input data - NOT in git, see Data
+│   ├── fembem/               # FEM/BEM (COMSOL) TS results and parameter files
+│   └── ts_database/          # Modelled TS(f) and f_bs(f) (CSV)
+├── docs/figures/             # Reference figures
+├── tests/                    # pytest tests
+├── outputs/                  # Generated figures (git-ignored, created on first run)
+├── pyproject.toml            # Project configuration and dependencies
+└── uv.lock                   # Locked dependency versions
 ```
 
 ## Requirements
@@ -25,63 +36,67 @@ Sv_modeling/
 
 ## Installation
 
-### 1. Clone the repository
-
 ```bash
 git clone https://github.com/CRIMAC-WP4-Machine-learning/Sv_modeling.git
 cd Sv_modeling
-```
-
-### 2. Create the virtual environment and install dependencies
-
-Using `uv`:
-
-```bash
 uv sync
 ```
 
-This creates a `.venv` directory and installs the dependencies specified in `pyproject.toml` and `uv.lock`.
+`uv sync` creates `.venv`, installs the dependencies from `pyproject.toml`/`uv.lock`, and installs the `sv_modeling` package in editable mode, so scripts can `import sv_modeling` without any `sys.path` changes.
 
-### 3. Activate the virtual environment
-
-On Linux or WSL Ubuntu:
+To activate the environment manually:
 
 ```bash
-source .venv/bin/activate
+source .venv/bin/activate        # Linux / WSL
+.venv\Scripts\Activate.ps1       # Windows PowerShell
 ```
 
-On Windows PowerShell:
+If you need a `requirements.txt` (e.g. for pip), generate it from the lock file:
 
-```powershell
-.venv\Scripts\Activate.ps1
+```bash
+uv export --no-hashes --no-dev > requirements.txt
 ```
+
+## Data
+
+Input data is not stored in git (`data/` is git-ignored). Before running the scripts, copy it into:
+
+```text
+data/
+├── fembem/                  # FEM/BEM (COMSOL) TS exports (*.txt + *_Param.txt), ~1.6 MB
+│                            #   used by DistributeFish_sv.py and DistributeFish_Pbs_compareCOMSOL.py
+└── ts_database/
+    ├── 150Hz/               # 18 CSV files, ~0.9 MB - used by all scripts
+    └── 1-260Khz/            # optional, not used by the scripts yet
+```
+
+Location of the source files: _TODO: add link to data storage (e.g. IMR share / Zenodo)_.
+
+Each TS-database CSV has columns `Freq_kHz`, `TS` (dB) and complex `f_bs`. Model parameters (`a`, `b`, `rhos`, `IncAngle`, `depth`, `length`) are encoded in the filename and parsed by `sv_modeling.database.Extract_database_metadata`.
 
 ## Running the simulations
-
-Simulation and analysis scripts are located in the `scripts/` directory.
-
-Run a script from the repository root using:
 
 ```bash
 uv run python scripts/<script_name>.py
 ```
 
-Replace `<script_name>.py` with the name of the script you want to execute.
+Data paths are resolved relative to the repository (see `src/sv_modeling/paths.py`), so scripts can be run from any working directory. Figures are written to `outputs/`.
 
-Alternatively, if the virtual environment is already activated:
+## Using the package
 
-```bash
-python scripts/<script_name>.py
+```python
+from sv_modeling.database import Extract_database_metadata, Find_closestfile_in_database
+from sv_modeling.paths import TS_DATABASE_150HZ_DIR
+
+df = Extract_database_metadata(TS_DATABASE_150HZ_DIR)
+row = Find_closestfile_in_database(df, _Depth=50, _Length=0.0, _IncAngl=88)
 ```
 
-**Note:** Run scripts from the repository root so relative paths to input data and output directories are resolved consistently, where applicable.
+## Tests
 
-## Project directories
-
-- **`src/`** — Python source code used by the simulations.
-- **`scripts/`** — Scripts for running simulations and analyzing results.
-- **`FEM_BEM/`** — Numerical scattering-model data and related resources.
-- **`model_results/`** — Directory for simulation outputs and results.
+```bash
+uv run pytest
+```
 
 ## Project information
 
