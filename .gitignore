@@ -5,6 +5,13 @@ build/
 dist/
 wheels/
 *.egg-info
+*:Zone.Identifier
+
+data/*
+!data/.gitkeep
+
+outputs/*
+!outputs/.gitkeep
 
 # Virtual environments
 .venv
