@@ -6,6 +6,11 @@ dist/
 wheels/
 *.egg-info
 
+# Ignore all data files and subdirectories
+data/*
+# Keep the placeholder file
+!data/.gitkeep
+
 # Virtual environments
 .venv
 
