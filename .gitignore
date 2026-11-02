@@ -5,6 +5,7 @@ build/
 dist/
 wheels/
 *.egg-info
+*:Zone.Identifier
 
 # Ignore all data files and subdirectories
 data/*
