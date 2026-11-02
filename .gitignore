@@ -6,12 +6,15 @@ dist/
 wheels/
 *.egg-info
 *:Zone.Identifier
+<<<<<<< HEAD
 
 data/*
 !data/.gitkeep
 
 outputs/*
 !outputs/.gitkeep
+=======
+>>>>>>> a3fa004f364eb6dc0eeb196ba0425ae1ce0df99e
 
 # Virtual environments
 .venv
