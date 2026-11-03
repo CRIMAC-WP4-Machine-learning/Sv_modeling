@@ -16,5 +16,19 @@ outputs/*
 =======
 >>>>>>> a3fa004f364eb6dc0eeb196ba0425ae1ce0df99e
 
+# Ignore all data files and subdirectories
+data/*
+# Keep the placeholder file
+!data/.gitkeep
+
 # Virtual environments
 .venv
+
+# IDE
+.idea/
+.vscode/
+
+# Windows download markers
+*:Zone.Identifier
+
+
