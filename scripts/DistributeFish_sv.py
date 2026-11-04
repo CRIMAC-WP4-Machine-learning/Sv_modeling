@@ -13,15 +13,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.signal import savgol_filter
 
-from sv_modeling.database import (
-    Extract_database_metadata,
-    Find_closestfile_in_database,
-    func_get_frq_TS_fbs_Dict,
-)
+from sv_modeling.database import Extract_database_metadata
 from sv_modeling.fembem import func_FEM_BEM
-from sv_modeling.geometry import Get_Angle
 from sv_modeling.paths import FEMBEM_DIR, TS_DATABASE_150HZ_DIR, output_path
 from sv_modeling.plotting import plot_fish_school
+from sv_modeling.scattering import coherent_backscatter, total_ts
 from sv_modeling.signals import func_Gen_SweepSig_Explicit
 from sv_modeling.spectrum import ESD_BKH
 
@@ -231,34 +227,12 @@ plt.show()
 
 # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
-# print('len(points): ', len(points))
-p_far = 0
-for ii in range(0, len(points)):
-    point_ii = points[ii]
-    orientations_ii = orientations[ii]
-
-    Incident_Angle_ii = Get_Angle(Observation_point, point_ii, orientations_ii)
-
-    # print('Incident_Angle_ii: ', Incident_Angle_ii)
-
-    Length = 0.0 # m.  This can be changed to include distribution of ranges
-
-    # Find the file in database (modeled .csv files) closest to the size of fish at "point_ii" with "orientation_ii"
-    target_dict = Find_closestfile_in_database(df_database, np.abs(point_ii[2]), Length, Incident_Angle_ii)
-    
-    L_fish = Length # m 
-    [freq, TS_ii, f_bs_ii] = func_get_frq_TS_fbs_Dict(database_dir, target_dict, L_fish)
-    # print(freq.shape)
-    Distance = np.linalg.norm(Observation_point-point_ii)
-    # print('Distance: ', Distance)
-    p_far_ii = (f_bs_ii/(Distance*Distance)) * np.exp(-1j*2*np.pi*(1000*freq/1500)*(2*Distance))  # k = 2*pi*f/c
-    p_far = p_far + p_far_ii
-    # plt.plot(freq, 20*np.log10(np.abs(f_bs_ii)), color = [1, 0, 0], dashes = [3,2], linewidth = 2)
-
-
-point_ii = points[0]
-Distance = np.linalg.norm(Observation_point-point_ii)
-Total_p_TS = 20*np.log10(np.abs(Distance*Distance * p_far))
+result = coherent_backscatter(
+    points, orientations, df_database, database_dir, Observation_point
+)
+freq = result.freq_hz / 1000  # kHz, for plotting
+p_far = result.p_far
+Total_p_TS = total_ts(p_far, result.distances[0])
 plt.plot(freq, Total_p_TS, color = [0, 0, 0], dashes = [3,0], linewidth = 1, label = 'Superposition')
 
 # plt.plot(f_bem/1000, TS_bem, color=[1,0,0], dashes = [2,2], label = 'FEM-BEM')

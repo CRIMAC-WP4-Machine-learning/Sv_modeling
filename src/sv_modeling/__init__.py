@@ -7,6 +7,7 @@ from sv_modeling.database import (
 )
 from sv_modeling.fembem import func_FEM_BEM
 from sv_modeling.geometry import Get_Angle
+from sv_modeling.scattering import coherent_backscatter, total_ts
 from sv_modeling.signals import func_Gen_SweepSig_Explicit
 from sv_modeling.spectrum import ESD_BKH
 
@@ -17,7 +18,9 @@ __all__ = [
     "Extract_database_metadata",
     "Find_closestfile_in_database",
     "Get_Angle",
+    "coherent_backscatter",
     "func_FEM_BEM",
     "func_Gen_SweepSig_Explicit",
     "func_get_frq_TS_fbs_Dict",
+    "total_ts",
 ]

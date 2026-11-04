@@ -24,21 +24,15 @@ Run from anywhere, e.g. from the repository root:
 
 Figures are written to outputs/.
 """
-import os
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from matplotlib.ticker import FormatStrFormatter
 
-from sv_modeling.database import (
-    Extract_database_metadata,
-    Find_closestfile_in_database,
-    func_get_frq_TS_fbs_Dict,
-)
-from sv_modeling.geometry import Get_Angle
+from sv_modeling.database import Extract_database_metadata
 from sv_modeling.paths import FEMBEM_DIR, TS_DATABASE_150HZ_DIR, output_path
 from sv_modeling.plotting import plot_fish_school
+from sv_modeling.scattering import coherent_backscatter
 from sv_modeling.signals import func_Gen_SweepSig_Explicit  # noqa: F401 (used in commented-out block)
 from sv_modeling.spectrum import ESD_BKH  # noqa: F401 (used in commented-out block)
 
@@ -416,60 +410,10 @@ print(f"Fish number density  : {rho_N:.3f} fish/m³")
 
 N = len(points)
 
-# Original frequency vector from the scattering database
-df_csv = pd.read_csv(
-    os.path.join(database_dir, df_database.iloc[0]["filename"])
-)
-
-freq_vec = df_csv["Freq_kHz"].to_numpy(dtype=float) * 1000
-
-# Store sigma_bs(f) for every fish
-sigma_bs_fish = np.zeros((N, len(freq_vec)))
-
-# Coherent backscattering
-p_far = np.zeros(len(freq_vec), dtype=complex)
-R0 = 1
-
-
-for ii in range(0, len(points)):
-    point_ii = points[ii]
-    orientations_ii = orientations[ii]
-
-    Incident_Angle_ii = Get_Angle(Observation_point, point_ii, orientations_ii)
-
-    Length = 0.0
-
-    target_dict = Find_closestfile_in_database(
-        df_database,
-        np.abs(point_ii[2]),
-        Length,
-        Incident_Angle_ii
-    )
-
-    L_fish = Length
-
-    [freq, TS_ii, f_bs_ii] = func_get_frq_TS_fbs_Dict(database_dir, target_dict, L_fish)
-
-
-    # ---------------------------------------------------
-    # Flat-spectrum averaged sigma_bs for fish ii
-    # ---------------------------------------------------
-
-    freq_Hz = np.asarray(freq, dtype=float) * 1000
-    f_bs_ii = np.asarray(f_bs_ii, dtype=complex)
-
-    # Verify that all fish have the same original frequency grid
-    if not np.allclose(freq_Hz, freq_vec, rtol=0, atol=1e-6):
-        raise ValueError("Different frequency grids in scattering database")
-
-    # Store scattering cross section across all frequencies
-    sigma_bs_fish[ii, :] = np.abs(f_bs_ii)**2
-
-    Distance = np.linalg.norm(Observation_point-point_ii)
-    # print('Distance: ', Distance)
-    p_far_ii = (f_bs_ii/(Distance*Distance)) * np.exp(-1j*2*np.pi*(1000*freq/1500)*(2*Distance))  # k = 2*pi*f/c
-    
-    p_far = p_far + p_far_ii
+result = coherent_backscatter(points, orientations, df_database, database_dir, Observation_point)
+freq_vec = result.freq_hz
+p_far = result.p_far
+sigma_bs_fish = result.sigma_bs  # sigma_bs(f) for every fish, shape (N, F)
 
 
 #%% Calculate number density using idealized flat spectrum
