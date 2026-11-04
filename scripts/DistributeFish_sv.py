@@ -17,6 +17,7 @@ from sv_modeling.database import Extract_database_metadata
 from sv_modeling.fembem import func_FEM_BEM
 from sv_modeling.paths import FEMBEM_DIR, TS_DATABASE_150HZ_DIR, output_path
 from sv_modeling.plotting import plot_fish_school
+from sv_modeling.school import orient_fish, place_fish_spheroid
 from sv_modeling.scattering import coherent_backscatter, total_ts
 from sv_modeling.signals import func_Gen_SweepSig_Explicit
 from sv_modeling.spectrum import ESD_BKH
@@ -115,73 +116,32 @@ Observation_point = np.array([0, 0, 0]) # Echosounder location
 # |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 # Example: place N points (fish location) with no overlap in a prolate or oblate spheroid
 # |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+seed = None  # set an int for a reproducible school
+rng = np.random.default_rng(seed)
+
 N = 200
-a, b = 2.0, 0.6  # spheroid axes
-points = []
-min_dist = 0.1
-Average_school_Depth = 50 # m
+a, b = 2.0, 0.6  # spheroid semi-axes (m): horizontal, vertical
+min_dist = 0.1  # m, minimum distance between fish
+Average_school_Depth = 50  # m
 
-# "Theta" is the angle of projected vector on XY plane and X axis
-theta_range = np.array([-0.01, 0.01])*np.pi/180
+# Orientation ranges (deg). Theta: azimuth in XY plane from +X. Phi: angle from +Z.
+theta_range_deg = (-0.01, 0.01)
+phi_range_deg = (89.99, 90.01)
 
-# "Phi" is the angle of vector and Z axis
-phi_range = np.array([89.99, 90.01])*np.pi/180
+# I. Fish positions, no overlap
+points = place_fish_spheroid(N, a, b, Average_school_Depth, min_dist, rng)
 
+# II. Fish orientations ("normal" or "uniform" within the ranges)
+orientations, theta, phi = orient_fish(N, theta_range_deg, phi_range_deg, rng, distribution="normal")
 
-# I. Create N points(x, y, z) with min_dist to avoid overlap:
-while len(points) < N:
-    x = np.random.uniform(-a, a) 
-    y = np.random.uniform(-a, a)
-    z = np.random.uniform(-b, b) - Average_school_Depth
-    if (x**2/a**2 + y**2/a**2 + (z + Average_school_Depth)**2/b**2) <= 1:
-        p = np.array([x, y, z])
-        if all(np.linalg.norm(p - q) > min_dist for q in points):
-            points.append(p)
-
-points = np.array(points)
-# print(points)
-
-
-
-# II. Orientaion of fish - Random unit vectors: 
-# "Theta" is the angle of projected vector on XY plane and X axis
-# "Phi" is the angle of vector and Z axis
-
-# RANDOM distribution:   -----------------------------------------------
-# Generate arrays of theta and phi: 
-theta = np.random.uniform(theta_range[0], theta_range[1], size=len(points))
-phi = np.random.uniform(phi_range[0], phi_range[1], size=len(points))
-
-# # NORMAL distribution:   -----------------------------------------------
-# Parameters
-mu = np.mean(theta_range)       # mean
-sigma = 0.25*(theta_range[1]-theta_range[0])     # standard deviation
-
-theta = np.random.normal(mu, sigma, N)
-
-# Plot histogram
-count, bins, ignored = plt.hist(180*theta/np.pi, bins=30, density=True, alpha=0.6, color='skyblue', edgecolor='black')
-plt.xlabel('$\\theta$',fontsize = 12)
+# Orientation histograms
+plt.hist(np.degrees(theta), bins=30, density=True, alpha=0.6, color='skyblue', edgecolor='black')
+plt.xlabel(r'$\theta$ (deg)', fontsize=12)
 plt.show()
 
-# Parameters
-mu = np.mean(phi_range)       # mean
-sigma = 0.25*(phi_range[1]-phi_range[0])     # standard deviation
-
-phi = np.random.normal(mu, sigma, N)
-
-# Plot histogram
-count, bins, ignored = plt.hist(180*phi/np.pi, bins=30, density=True, alpha=0.6, color='skyblue', edgecolor='black')
-plt.xlabel(r'$\phi$',fontsize = 12)
+plt.hist(np.degrees(phi), bins=30, density=True, alpha=0.6, color='skyblue', edgecolor='black')
+plt.xlabel(r'$\phi$ (deg)', fontsize=12)
 plt.show()
-
-# Convert spherical to Cartesian coordinates
-x = np.sin(phi) * np.cos(theta)
-y = np.sin(phi) * np.sin(theta)
-z = np.cos(phi)
-
-orientations = np.stack((x, y, z), axis=1)  # shape (N, 3)
-orientations /= np.linalg.norm(orientations, axis=1)[:, np.newaxis]  # normalize
 
 # print(orientations[0])
 

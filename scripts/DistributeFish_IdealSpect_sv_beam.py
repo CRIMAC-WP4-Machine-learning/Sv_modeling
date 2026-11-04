@@ -32,6 +32,7 @@ from matplotlib.ticker import FormatStrFormatter
 from sv_modeling.database import Extract_database_metadata
 from sv_modeling.paths import FEMBEM_DIR, TS_DATABASE_150HZ_DIR, output_path
 from sv_modeling.plotting import plot_fish_school
+from sv_modeling.school import orient_fish, place_fish_beam_shell
 from sv_modeling.scattering import coherent_backscatter
 from sv_modeling.signals import func_Gen_SweepSig_Explicit  # noqa: F401 (used in commented-out block)
 from sv_modeling.spectrum import ESD_BKH  # noqa: F401 (used in commented-out block)
@@ -122,48 +123,23 @@ Observation_point = np.array([0, 0, 0]) # Echosounder location
 # |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
 # Parameters
+seed = None  # set an int for a reproducible school
+rng = np.random.default_rng(seed)
+
 N = 200
-points = []
-min_dist = 0.1
+min_dist = 0.1  # m, minimum distance between fish
 
-School_Mean_range = 50.0
-School_thikness = 1
+School_Mean_range = 50.0  # m
+School_thikness = 1  # m
 
-beam_half_angle = np.deg2rad(3.5)
+beam_half_angle_deg = 3.5
+beam_half_angle = np.deg2rad(beam_half_angle_deg)
 
 R = School_Mean_range
 DR = School_thikness
 
-r_min = R - DR / 2
-r_max = R + DR / 2
-
-rng = np.random.default_rng()
-
 # Generate targets uniformly in the circular conical shell
-while len(points) < N:
-
-    # Uniform sampling in volume
-    r = np.cbrt(rng.uniform(r_min**3, r_max**3))
-
-    # Polar angle from acoustic axis (+Z)
-    cos_gamma = rng.uniform(np.cos(beam_half_angle), 1.0)
-    gamma = np.arccos(cos_gamma)
-
-    # Azimuth in XY plane, measured from +X toward +Y
-    azimuth = rng.uniform(0, 2 * np.pi)
-
-    # Cartesian coordinates
-    x = r * np.sin(gamma) * np.cos(azimuth)
-    y = r * np.sin(gamma) * np.sin(azimuth)
-    z = r * np.cos(gamma)
-
-    p = np.array([x, y, z])
-
-    # Minimum distance between targets
-    if all(np.linalg.norm(p - q) >= min_dist for q in points):
-        points.append(p)
-
-points = np.asarray(points)
+points = place_fish_beam_shell(N, R, DR, beam_half_angle_deg, min_dist, rng)
 
 #|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 # ---------------------------------------------------------
@@ -274,51 +250,13 @@ points = np.asarray(points)
 #|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
 
-# II. Orientaion of fish - Random unit vectors: 
-# "Theta" is the angle of projected vector on XY plane and X axis
-# "Phi" is the angle of vector and Z axis
+# II. Orientation of fish
+# Ranges (deg). Theta: azimuth in XY plane from +X. Phi: angle from +Z.
+theta_range_deg = (-0.001, 0.001)
+phi_range_deg = (89.999, 90.001)
 
-# RANDOM distribution:   -----------------------------------------------
-# "Theta" is the angle of projected vector on XY plane and X axis
-theta_range = np.array([-0.001, 0.001])*np.pi/180
-
-# "Phi" is the angle of vector and Z axis
-phi_range = np.array([89.999, 90.001])*np.pi/180
-
-# Generate arrays of theta and phi: 
-theta = np.random.uniform(theta_range[0], theta_range[1], size=len(points))
-phi = np.random.uniform(phi_range[0], phi_range[1], size=len(points))
-
-# # NORMAL distribution:   -----------------------------------------------
-# Parameters
-mu = np.mean(theta_range)       # mean
-sigma = 0.25*(theta_range[1]-theta_range[0])     # standard deviation
-
-theta = np.random.normal(mu, sigma, N)
-
-# # Plot histogram
-# count, bins, ignored = plt.hist(180*theta/np.pi, bins=30, density=True, alpha=0.6, color='skyblue', edgecolor='black')
-# plt.xlabel('$\\theta$',fontsize = 12)
-# plt.show()
-
-# Parameters
-mu = np.mean(phi_range)       # mean
-sigma = 0.25*(phi_range[1]-phi_range[0])     # standard deviation
-
-phi = np.random.normal(mu, sigma, N)
-
-# # Plot histogram
-# count, bins, ignored = plt.hist(180*phi/np.pi, bins=30, density=True, alpha=0.6, color='skyblue', edgecolor='black')
-# plt.xlabel(r'$\phi$',fontsize = 12)
-# plt.show()
-
-# Convert spherical to Cartesian coordinates
-x = np.sin(phi) * np.cos(theta)
-y = np.sin(phi) * np.sin(theta)
-z = np.cos(phi)
-
-orientations = np.stack((x, y, z), axis=1)  # shape (N, 3)
-orientations /= np.linalg.norm(orientations, axis=1)[:, np.newaxis]  # normalize
+# "normal" or "uniform" within the ranges
+orientations, theta, phi = orient_fish(N, theta_range_deg, phi_range_deg, rng, distribution="normal")
 
 
 #%% Fish aggregate volume and number density
