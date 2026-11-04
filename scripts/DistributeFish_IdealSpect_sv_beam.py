@@ -24,21 +24,17 @@ Run from anywhere, e.g. from the repository root:
 
 Figures are written to outputs/.
 """
-import os
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from matplotlib.ticker import FormatStrFormatter
 
-from sv_modeling.database import (
-    Extract_database_metadata,
-    Find_closestfile_in_database,
-    func_get_frq_TS_fbs_Dict,
-)
-from sv_modeling.geometry import Get_Angle
+from sv_modeling.database import Extract_database_metadata
+from sv_modeling.density import beam_shell_volume, estimate_density
 from sv_modeling.paths import FEMBEM_DIR, TS_DATABASE_150HZ_DIR, output_path
 from sv_modeling.plotting import plot_fish_school
+from sv_modeling.school import orient_fish, place_fish_beam_shell
+from sv_modeling.scattering import coherent_backscatter
 from sv_modeling.signals import func_Gen_SweepSig_Explicit  # noqa: F401 (used in commented-out block)
 from sv_modeling.spectrum import ESD_BKH  # noqa: F401 (used in commented-out block)
 
@@ -128,48 +124,23 @@ Observation_point = np.array([0, 0, 0]) # Echosounder location
 # |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
 # Parameters
+seed = None  # set an int for a reproducible school
+rng = np.random.default_rng(seed)
+
 N = 200
-points = []
-min_dist = 0.1
+min_dist = 0.1  # m, minimum distance between fish
 
-School_Mean_range = 50.0
-School_thikness = 1
+School_Mean_range = 50.0  # m
+School_thikness = 1  # m
 
-beam_half_angle = np.deg2rad(3.5)
+beam_half_angle_deg = 3.5
+beam_half_angle = np.deg2rad(beam_half_angle_deg)
 
 R = School_Mean_range
 DR = School_thikness
 
-r_min = R - DR / 2
-r_max = R + DR / 2
-
-rng = np.random.default_rng()
-
 # Generate targets uniformly in the circular conical shell
-while len(points) < N:
-
-    # Uniform sampling in volume
-    r = np.cbrt(rng.uniform(r_min**3, r_max**3))
-
-    # Polar angle from acoustic axis (+Z)
-    cos_gamma = rng.uniform(np.cos(beam_half_angle), 1.0)
-    gamma = np.arccos(cos_gamma)
-
-    # Azimuth in XY plane, measured from +X toward +Y
-    azimuth = rng.uniform(0, 2 * np.pi)
-
-    # Cartesian coordinates
-    x = r * np.sin(gamma) * np.cos(azimuth)
-    y = r * np.sin(gamma) * np.sin(azimuth)
-    z = r * np.cos(gamma)
-
-    p = np.array([x, y, z])
-
-    # Minimum distance between targets
-    if all(np.linalg.norm(p - q) >= min_dist for q in points):
-        points.append(p)
-
-points = np.asarray(points)
+points = place_fish_beam_shell(N, R, DR, beam_half_angle_deg, min_dist, rng)
 
 #|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 # ---------------------------------------------------------
@@ -280,51 +251,13 @@ points = np.asarray(points)
 #|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
 
-# II. Orientaion of fish - Random unit vectors: 
-# "Theta" is the angle of projected vector on XY plane and X axis
-# "Phi" is the angle of vector and Z axis
+# II. Orientation of fish
+# Ranges (deg). Theta: azimuth in XY plane from +X. Phi: angle from +Z.
+theta_range_deg = (-0.001, 0.001)
+phi_range_deg = (89.999, 90.001)
 
-# RANDOM distribution:   -----------------------------------------------
-# "Theta" is the angle of projected vector on XY plane and X axis
-theta_range = np.array([-0.001, 0.001])*np.pi/180
-
-# "Phi" is the angle of vector and Z axis
-phi_range = np.array([89.999, 90.001])*np.pi/180
-
-# Generate arrays of theta and phi: 
-theta = np.random.uniform(theta_range[0], theta_range[1], size=len(points))
-phi = np.random.uniform(phi_range[0], phi_range[1], size=len(points))
-
-# # NORMAL distribution:   -----------------------------------------------
-# Parameters
-mu = np.mean(theta_range)       # mean
-sigma = 0.25*(theta_range[1]-theta_range[0])     # standard deviation
-
-theta = np.random.normal(mu, sigma, N)
-
-# # Plot histogram
-# count, bins, ignored = plt.hist(180*theta/np.pi, bins=30, density=True, alpha=0.6, color='skyblue', edgecolor='black')
-# plt.xlabel('$\\theta$',fontsize = 12)
-# plt.show()
-
-# Parameters
-mu = np.mean(phi_range)       # mean
-sigma = 0.25*(phi_range[1]-phi_range[0])     # standard deviation
-
-phi = np.random.normal(mu, sigma, N)
-
-# # Plot histogram
-# count, bins, ignored = plt.hist(180*phi/np.pi, bins=30, density=True, alpha=0.6, color='skyblue', edgecolor='black')
-# plt.xlabel(r'$\phi$',fontsize = 12)
-# plt.show()
-
-# Convert spherical to Cartesian coordinates
-x = np.sin(phi) * np.cos(theta)
-y = np.sin(phi) * np.sin(theta)
-z = np.cos(phi)
-
-orientations = np.stack((x, y, z), axis=1)  # shape (N, 3)
-orientations /= np.linalg.norm(orientations, axis=1)[:, np.newaxis]  # normalize
+# "normal" or "uniform" within the ranges
+orientations, theta, phi = orient_fish(N, theta_range_deg, phi_range_deg, rng, distribution="normal")
 
 
 #%% Fish aggregate volume and number density
@@ -357,22 +290,14 @@ orientations /= np.linalg.norm(orientations, axis=1)[:, np.newaxis]  # normalize
 # of the entire fish school if it extends beyond the beam.
 # ---------------------------------------------------------------
 
-r_min = R - DR / 2
-r_max = R + DR / 2
-alpha = beam_half_angle
-
-# Exact beam-sampled volume (m³)
-V = (2 * np.pi / 3) * (1 - np.cos(alpha)) * (r_max**3 - r_min**3)
-
-# Approximate volume for narrow beam and thin range interval
-V_approx = np.pi * R**2 * alpha**2 * DR
+# Exact beam-sampled volume (m³); approximate=True gives the narrow-beam form
+V = beam_shell_volume(R, DR, beam_half_angle_deg)
 
 # Fish number density (fish/m³)
 rho_N = len(points) / V
 
 print(f"Number of fish       : {len(points)}")
 print(f"Aggregate volume     : {V:.3f} m³")
-# print(f"Approximate volume   : {V_approx:.3f} m³")
 print(f"Fish number density  : {rho_N:.3f} fish/m³")
 
 
@@ -416,110 +341,24 @@ print(f"Fish number density  : {rho_N:.3f} fish/m³")
 
 N = len(points)
 
-# Original frequency vector from the scattering database
-df_csv = pd.read_csv(
-    os.path.join(database_dir, df_database.iloc[0]["filename"])
-)
-
-freq_vec = df_csv["Freq_kHz"].to_numpy(dtype=float) * 1000
-
-# Store sigma_bs(f) for every fish
-sigma_bs_fish = np.zeros((N, len(freq_vec)))
-
-# Coherent backscattering
-p_far = np.zeros(len(freq_vec), dtype=complex)
-R0 = 1
+result = coherent_backscatter(points, orientations, df_database, database_dir, Observation_point)
+freq_vec = result.freq_hz
+p_far = result.p_far
+sigma_bs_fish = result.sigma_bs  # sigma_bs(f) for every fish, shape (N, F)
 
 
-for ii in range(0, len(points)):
-    point_ii = points[ii]
-    orientations_ii = orientations[ii]
-
-    Incident_Angle_ii = Get_Angle(Observation_point, point_ii, orientations_ii)
-
-    Length = 0.0
-
-    target_dict = Find_closestfile_in_database(
-        df_database,
-        np.abs(point_ii[2]),
-        Length,
-        Incident_Angle_ii
-    )
-
-    L_fish = Length
-
-    [freq, TS_ii, f_bs_ii] = func_get_frq_TS_fbs_Dict(database_dir, target_dict, L_fish)
-
-
-    # ---------------------------------------------------
-    # Flat-spectrum averaged sigma_bs for fish ii
-    # ---------------------------------------------------
-
-    freq_Hz = np.asarray(freq, dtype=float) * 1000
-    f_bs_ii = np.asarray(f_bs_ii, dtype=complex)
-
-    # Verify that all fish have the same original frequency grid
-    if not np.allclose(freq_Hz, freq_vec, rtol=0, atol=1e-6):
-        raise ValueError("Different frequency grids in scattering database")
-
-    # Store scattering cross section across all frequencies
-    sigma_bs_fish[ii, :] = np.abs(f_bs_ii)**2
-
-    Distance = np.linalg.norm(Observation_point-point_ii)
-    # print('Distance: ', Distance)
-    p_far_ii = (f_bs_ii/(Distance*Distance)) * np.exp(-1j*2*np.pi*(1000*freq/1500)*(2*Distance))  # k = 2*pi*f/c
-    
-    p_far = p_far + p_far_ii
-
-
-#%% Calculate number density using idealized flat spectrum
-
-# Calculate svf over all frequencies
-R = School_Mean_range
-V_GV = V
-svf = np.abs(p_far)**2 * R**4 / V_GV
-
-
-#%% Number density estimation for selected frequency band
+#%% Number density estimation for selected frequency band (flat spectral weighting)
 
 f1 = 38000.0
 f2 = 70000.0
 
-mask = (freq_vec >= f1) & (freq_vec <= f2)
-freq_band = freq_vec[mask]
+estimate = estimate_density(result, R, V, (f1, f2))
+svf = estimate.svf  # coherent s_v(f) over all frequencies
 
-B = freq_band[-1] - freq_band[0]
-
-# Band-averaged coherent volume backscattering
-sv_mean = np.trapezoid(svf[mask], freq_band) / B
-
-# Band-averaged sigma_bs of each fish
-sigma_bs_P_fish = (
-    np.trapezoid(sigma_bs_fish[:, mask], freq_band, axis=1) / B
-)
-
-sigma_bs_P_mean = np.mean(sigma_bs_P_fish)
-
-# Coherent density
-n_b_est_acoustic = sv_mean / sigma_bs_P_mean
-
-# Incoherent density
-R_i = np.linalg.norm(points - Observation_point, axis=1)
-
-sv_incoh_mean = (
-    R**4 / V_GV
-    * np.sum(sigma_bs_P_fish / R_i**4)
-)
-
-n_b_incoh = sv_incoh_mean / sigma_bs_P_mean
-
-# True density
-n_b_true = N / V_GV
-
-print(f"Coherent density : {n_b_est_acoustic:.4f} fish/m³")
-print(f"Incoherent density: {n_b_incoh:.4f} fish/m³")
-print(f"True density     : {n_b_true:.4f} fish/m³")
-print(f"Coherent/True    : {n_b_est_acoustic/n_b_true:.4f}")
+print(f"Coherent density : {estimate.coherent:.4f} fish/m³")
+print(f"Incoherent density: {estimate.incoherent:.4f} fish/m³")
+print(f"True density     : {estimate.true:.4f} fish/m³")
+print(f"Coherent/True    : {estimate.coherent / estimate.true:.4f}")
 
 
 #%% ====================================================
