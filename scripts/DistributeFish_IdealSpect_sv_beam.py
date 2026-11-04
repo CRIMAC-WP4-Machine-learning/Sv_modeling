@@ -30,6 +30,7 @@ import numpy as np
 from matplotlib.ticker import FormatStrFormatter
 
 from sv_modeling.database import Extract_database_metadata
+from sv_modeling.density import beam_shell_volume, estimate_density
 from sv_modeling.paths import FEMBEM_DIR, TS_DATABASE_150HZ_DIR, output_path
 from sv_modeling.plotting import plot_fish_school
 from sv_modeling.school import orient_fish, place_fish_beam_shell
@@ -289,22 +290,14 @@ orientations, theta, phi = orient_fish(N, theta_range_deg, phi_range_deg, rng, d
 # of the entire fish school if it extends beyond the beam.
 # ---------------------------------------------------------------
 
-r_min = R - DR / 2
-r_max = R + DR / 2
-alpha = beam_half_angle
-
-# Exact beam-sampled volume (m³)
-V = (2 * np.pi / 3) * (1 - np.cos(alpha)) * (r_max**3 - r_min**3)
-
-# Approximate volume for narrow beam and thin range interval
-V_approx = np.pi * R**2 * alpha**2 * DR
+# Exact beam-sampled volume (m³); approximate=True gives the narrow-beam form
+V = beam_shell_volume(R, DR, beam_half_angle_deg)
 
 # Fish number density (fish/m³)
 rho_N = len(points) / V
 
 print(f"Number of fish       : {len(points)}")
 print(f"Aggregate volume     : {V:.3f} m³")
-# print(f"Approximate volume   : {V_approx:.3f} m³")
 print(f"Fish number density  : {rho_N:.3f} fish/m³")
 
 
@@ -354,54 +347,18 @@ p_far = result.p_far
 sigma_bs_fish = result.sigma_bs  # sigma_bs(f) for every fish, shape (N, F)
 
 
-#%% Calculate number density using idealized flat spectrum
-
-# Calculate svf over all frequencies
-R = School_Mean_range
-V_GV = V
-svf = np.abs(p_far)**2 * R**4 / V_GV
-
-
-#%% Number density estimation for selected frequency band
+#%% Number density estimation for selected frequency band (flat spectral weighting)
 
 f1 = 38000.0
 f2 = 70000.0
 
-mask = (freq_vec >= f1) & (freq_vec <= f2)
-freq_band = freq_vec[mask]
+estimate = estimate_density(result, R, V, (f1, f2))
+svf = estimate.svf  # coherent s_v(f) over all frequencies
 
-B = freq_band[-1] - freq_band[0]
-
-# Band-averaged coherent volume backscattering
-sv_mean = np.trapezoid(svf[mask], freq_band) / B
-
-# Band-averaged sigma_bs of each fish
-sigma_bs_P_fish = (
-    np.trapezoid(sigma_bs_fish[:, mask], freq_band, axis=1) / B
-)
-
-sigma_bs_P_mean = np.mean(sigma_bs_P_fish)
-
-# Coherent density
-n_b_est_acoustic = sv_mean / sigma_bs_P_mean
-
-# Incoherent density
-R_i = np.linalg.norm(points - Observation_point, axis=1)
-
-sv_incoh_mean = (
-    R**4 / V_GV
-    * np.sum(sigma_bs_P_fish / R_i**4)
-)
-
-n_b_incoh = sv_incoh_mean / sigma_bs_P_mean
-
-# True density
-n_b_true = N / V_GV
-
-print(f"Coherent density : {n_b_est_acoustic:.4f} fish/m³")
-print(f"Incoherent density: {n_b_incoh:.4f} fish/m³")
-print(f"True density     : {n_b_true:.4f} fish/m³")
-print(f"Coherent/True    : {n_b_est_acoustic/n_b_true:.4f}")
+print(f"Coherent density : {estimate.coherent:.4f} fish/m³")
+print(f"Incoherent density: {estimate.incoherent:.4f} fish/m³")
+print(f"True density     : {estimate.true:.4f} fish/m³")
+print(f"Coherent/True    : {estimate.coherent / estimate.true:.4f}")
 
 
 #%% ====================================================
