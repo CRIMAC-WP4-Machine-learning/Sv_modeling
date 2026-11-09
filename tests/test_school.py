@@ -77,10 +77,11 @@ def test_orient_fish_statistics(distribution):
     np.testing.assert_allclose(angles_to_unit_vectors(theta, phi), o)
     assert np.degrees(theta).mean() == pytest.approx(0, abs=0.2)
     assert np.degrees(phi).mean() == pytest.approx(90, abs=0.2)
-    if distribution == "uniform":
-        assert np.degrees(theta).min() >= -10 and np.degrees(theta).max() <= 10
-    else:
-        assert np.degrees(theta).std() == pytest.approx(5.0, rel=0.03)  # 1/4 of the 20 deg width
+    assert np.degrees(theta).min() >= -10 and np.degrees(theta).max() <= 10
+    assert np.degrees(phi).min() >= 80 and np.degrees(phi).max() <= 100
+    if distribution == "normal":
+        # std = 1/4 of the 20 deg width (5 deg), truncated at +-2 sigma -> ~0.88 * 5 deg
+        assert np.degrees(theta).std() == pytest.approx(4.40, rel=0.03)
 
 
 def test_orient_fish_unknown_distribution():

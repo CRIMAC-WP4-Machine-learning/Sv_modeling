@@ -97,6 +97,17 @@ def angles_to_unit_vectors(theta, phi):
     return v / np.linalg.norm(v, axis=1)[:, np.newaxis]
 
 
+def _truncated_normal(lo, hi, n, rng):
+    """Normal(mean=(lo+hi)/2, std=(hi-lo)/4) restricted to [lo, hi] by redrawing."""
+    mu, sigma = (lo + hi) / 2, 0.25 * (hi - lo)
+    x = rng.normal(mu, sigma, n)
+    bad = (x < lo) | (x > hi)
+    while bad.any():
+        x[bad] = rng.normal(mu, sigma, bad.sum())
+        bad = (x < lo) | (x > hi)
+    return x
+
+
 def orient_fish(n, theta_range_deg, phi_range_deg, rng, distribution="normal"):
     """Draw random fish orientations.
 
@@ -109,8 +120,8 @@ def orient_fish(n, theta_range_deg, phi_range_deg, rng, distribution="normal"):
     rng : numpy.random.Generator
     distribution : {"normal", "uniform"}
         "uniform": uniform within each range.
-        "normal": mean at the range centre, std = 1/4 of the range width
-        (values may fall outside the range).
+        "normal": mean at the range centre, std = 1/4 of the range width,
+        truncated to the range (out-of-range draws are redrawn).
 
     Returns
     -------
@@ -123,7 +134,7 @@ def orient_fish(n, theta_range_deg, phi_range_deg, rng, distribution="normal"):
     if distribution == "uniform":
         theta, phi = (rng.uniform(lo, hi, n) for lo, hi in ranges)
     elif distribution == "normal":
-        theta, phi = (rng.normal((lo + hi) / 2, 0.25 * (hi - lo), n) for lo, hi in ranges)
+        theta, phi = (_truncated_normal(lo, hi, n, rng) for lo, hi in ranges)
     else:
         raise ValueError(f"Unknown distribution {distribution!r}; use 'normal' or 'uniform'")
     return angles_to_unit_vectors(theta, phi), theta, phi
