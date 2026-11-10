@@ -13,15 +13,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.signal import savgol_filter
 
-from sv_modeling.database import (
-    Extract_database_metadata,
-    Find_closestfile_in_database,
-    func_get_frq_TS_fbs_Dict,
-)
+from sv_modeling.database import Extract_database_metadata
 from sv_modeling.fembem import func_FEM_BEM
-from sv_modeling.geometry import Get_Angle
 from sv_modeling.paths import FEMBEM_DIR, TS_DATABASE_150HZ_DIR, output_path
 from sv_modeling.plotting import plot_fish_school
+from sv_modeling.school import angles_to_unit_vectors
+from sv_modeling.scattering import coherent_backscatter, total_ts
 from sv_modeling.signals import func_Gen_SweepSig_Explicit
 from sv_modeling.spectrum import ESD_BKH
 
@@ -119,109 +116,28 @@ Observation_point = np.array([0, 0, 0]) # Echosounder location
 # Example: place N points (fish location) with no overlap in a prolate or oblate spheroid
 # |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
-# N = 200
-# a, b = 2.0, 0.6  # spheroid axes
-# points = []
-# min_dist = 0.1
-# Average_school_Depth = 50 # m
-
-# # "Theta" is the angle of projected vector on XY plane and X axis
-# theta_range = np.array([-0.01, 0.01])*np.pi/180
-
-# # "Phi" is the angle of vector and Z axis
-# phi_range = np.array([89.99, 90.01])*np.pi/180
-
-
-# # I. Create N points(x, y, z) with min_dist to avoid overlap:
-# while len(points) < N:
-#     x = np.random.uniform(-a, a) 
-#     y = np.random.uniform(-a, a)
-#     z = np.random.uniform(-b, b) - Average_school_Depth
-#     if (x**2/a**2 + y**2/a**2 + (z + Average_school_Depth)**2/b**2) <= 1:
-#         p = np.array([x, y, z])
-#         if all(np.linalg.norm(p - q) > min_dist for q in points):
-#             points.append(p)
-
-# points = np.array(points)
-# # print(points)
-
-
-
-# # II. Orientaion of fish - Random unit vectors: 
-# # "Theta" is the angle of projected vector on XY plane and X axis
-# # "Phi" is the angle of vector and Z axis
-
-# # RANDOM distribution:   -----------------------------------------------
-# # Generate arrays of theta and phi: 
-# theta = np.random.uniform(theta_range[0], theta_range[1], size=len(points))
-# phi = np.random.uniform(phi_range[0], phi_range[1], size=len(points))
-
-# # # NORMAL distribution:   -----------------------------------------------
-# # Parameters
-# mu = np.mean(theta_range)       # mean
-# sigma = 0.25*(theta_range[1]-theta_range[0])     # standard deviation
-
-# theta = np.random.normal(mu, sigma, N)
-
-# # Plot histogram
-# count, bins, ignored = plt.hist(180*theta/np.pi, bins=30, density=True, alpha=0.6, color='skyblue', edgecolor='black')
-# plt.xlabel('$\\theta$',fontsize = 12)
-# plt.show()
-
-# # Parameters
-# mu = np.mean(phi_range)       # mean
-# sigma = 0.25*(phi_range[1]-phi_range[0])     # standard deviation
-
-# phi = np.random.normal(mu, sigma, N)
-
-# # Plot histogram
-# count, bins, ignored = plt.hist(180*phi/np.pi, bins=30, density=True, alpha=0.6, color='skyblue', edgecolor='black')
-# plt.xlabel(r'$\phi$',fontsize = 12)
-# plt.show()
-
-# # Convert spherical to Cartesian coordinates
-# x = np.sin(phi) * np.cos(theta)
-# y = np.sin(phi) * np.sin(theta)
-# z = np.cos(phi)
-
-# orientations = np.stack((x, y, z), axis=1)  # shape (N, 3)
-# orientations /= np.linalg.norm(orientations, axis=1)[:, np.newaxis]  # normalize
-
-# print(orientations[0])
+# from sv_modeling.school import orient_fish, place_fish_spheroid
+# rng = np.random.default_rng(seed=None)
+# N, a, b, min_dist, Average_school_Depth = 200, 2.0, 0.6, 0.1, 50
+# points = place_fish_spheroid(N, a, b, Average_school_Depth, min_dist, rng)
+# orientations, theta, phi = orient_fish(N, (-0.01, 0.01), (89.99, 90.01), rng, distribution="normal")
 
 
 # |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 #                       Test case for two fish:  
 # ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||| 
-points = []
-Average_school_Depth = 50 # m
-p = np.array([0, 0, - Average_school_Depth])
-points.append(p)
+Average_school_Depth = 50  # m
+points = np.array([
+    [0, 0, -Average_school_Depth],
+    [0, 0, -Average_school_Depth - 0.1],
+    [0, 0, -Average_school_Depth - 0.25],
+    [0, -0.25, -Average_school_Depth - 0.25],
+], dtype=float)
 
-p = np.array([0, 0, - Average_school_Depth -  0.1])
-points.append(p)
-
-p = np.array([0, 0, - Average_school_Depth - 0.25])
-points.append(p)
-
-p = np.array([0, -0.25, - Average_school_Depth - 0.25])
-points.append(p)
-
-points = np.array(points)
-# print(points)
-
-
-# Orientation: ---------------------------------------------
-PHI = np.array([90.0, 90.0, 90.0, 90.0]) * np.pi/180
-THETA = np.array([0.0, 0.0, 0.0, 0.0]) * np.pi/180
-
-# Convert spherical to Cartesian coordinates
-x = np.sin(PHI) * np.cos(THETA)
-y = np.sin(PHI) * np.sin(THETA)
-z = np.cos(PHI)
-
-orientations = np.stack((x, y, z), axis=1)  # shape (N, 3)
-orientations /= np.linalg.norm(orientations, axis=1)[:, np.newaxis]  # normalize
+# Orientation: all horizontal along +X
+PHI = np.radians([90.0, 90.0, 90.0, 90.0])
+THETA = np.radians([0.0, 0.0, 0.0, 0.0])
+orientations = angles_to_unit_vectors(THETA, PHI)
 # # ====================================================
 
 
@@ -232,34 +148,14 @@ plt.show()
 
 # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
-# print('len(points): ', len(points))
-p_far = 0
-for ii in range(0, len(points)):
-    point_ii = points[ii]
-    orientations_ii = orientations[ii]
-
-    Incident_Angle_ii = Get_Angle(Observation_point, point_ii, orientations_ii)
-
-    print('Incident_Angle_ii: ', Incident_Angle_ii)
-
-    Length = 0.0 # m.  This can be changed to include distribution of ranges
-
-    # Find the file in database (modeled .csv files) closest to the size of fish at "point_ii" with "orientation_ii"
-    target_dict = Find_closestfile_in_database(df_database, np.abs(point_ii[2]), Length, Incident_Angle_ii, verbose=True)
-    
-    L_fish = Length # m 
-    [freq, TS_ii, f_bs_ii] = func_get_frq_TS_fbs_Dict(database_dir, target_dict, L_fish)
-    print(freq.shape)
-    Distance = np.linalg.norm(Observation_point-point_ii)
-    print('Distance: ', Distance)
-    p_far_ii = (f_bs_ii/(Distance*Distance)) * np.exp(-1j*2*np.pi*(1000*freq/1500)*(2*Distance))  # k = 2*pi*f/c
-    p_far = p_far + p_far_ii
-    # plt.plot(freq, 20*np.log10(np.abs(f_bs_ii)), color = [1, 0, 0], dashes = [3,2], linewidth = 2)
-
-
-point_ii = points[0]
-Distance = np.linalg.norm(Observation_point-point_ii)
-Total_p_TS = 20*np.log10(np.abs(Distance*Distance * p_far))
+result = coherent_backscatter(
+    points, orientations, df_database, database_dir, Observation_point, verbose=True
+)
+print('Incident angles (deg): ', result.incident_angles)
+print('Distances (m): ', result.distances)
+freq = result.freq_hz / 1000  # kHz, for plotting
+p_far = result.p_far
+Total_p_TS = total_ts(p_far, result.distances[0])
 plt.plot(freq, Total_p_TS, color = [0, 0, 0], dashes = [3,0], linewidth = 1, label = 'Superposition')
 
 plt.plot(f_bem/1000, TS_bem, color=[1,0,0], dashes = [2,2], label = 'FEM-BEM')
