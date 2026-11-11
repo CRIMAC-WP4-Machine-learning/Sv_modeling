@@ -2,11 +2,16 @@
 Generate complex backscattering amplitude f_bs for spherical gas bubbles
 over specified depth, radius and frequency ranges.
 
+Check if the required ".csv" exist in data/ts_database/spherical.
+IF NOT, run sphere_backscatt_library_generation.py first for Gas content (e.g. O2, CO2, C2H6 etc), 
+at required depth and size distribution
+
 Results are saved to data/ts_database/spherical/.
 """
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from sv_modeling.f_bs_sphere import func_formfunc_FluidFiledSphere_Rinf
 from sv_modeling.equations_of_state import func_VanDerWaals
@@ -19,15 +24,15 @@ Bubble_Depth_start = 50  # m
 Bubble_Depth_end = 60  # m
 Depth_resolution = 0.05  # m
 
-freq_start = 45000  # Hz
-freq_end = 90000  # Hz
+freq_start = 1000  # Hz
+freq_end = 190000  # Hz
 freq_resolution = 100  # Hz
 
 R_bubble_min = 0.0005  # m
 R_bubble_max = 0.002  # m
 R_bubble_resolution = 0.0001  # m
 
-Gas = "CO2"
+Gas = "C2H6"
 P0 = 1e5
 ro_w = 1027  # kg/m^3
 c_w = 1500  # m/s
@@ -43,6 +48,22 @@ c_gas = func_c_gas(Temperature_C, Gas)
 
 results = []
 
+# test: ============================
+# D = 50
+# Pressure = P0 + ro_w * D * 9.81
+# ro_gas = func_VanDerWaals(Pressure, Temperature_C, Gas)
+# R = 1e-3# 
+# f_bs = func_formfunc_FluidFiledSphere_Rinf(
+#             R, ro_w, ro_gas, c_w, c_gas, freq_vec,
+#             R_inf=None, use_exact_farfield=False
+#         )
+
+# plt.plot(freq_vec, 20*np.log10(np.abs(f_bs)))
+# plt.show()
+#============================
+
+
+
 
 #%% Calculate backscattering
 for D in D_vec:
@@ -50,6 +71,7 @@ for D in D_vec:
     Pressure = P0 + ro_w * D * 9.81
     ro_gas = func_VanDerWaals(Pressure, Temperature_C, Gas)
 
+    print('C, ro ', c_gas, ro_gas)
     for R in R_bubble_vec:
 
         f_bs = func_formfunc_FluidFiledSphere_Rinf(
@@ -82,3 +104,5 @@ df.to_csv(filepath, index=False)
 print(f"Saved: {filepath}")
 print(f"Number of rows: {len(df):,}")
 print(df.head())
+
+
