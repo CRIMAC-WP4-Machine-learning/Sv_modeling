@@ -71,7 +71,7 @@ for D in D_vec:
     Pressure = P0 + ro_w * D * 9.81
     ro_gas = func_VanDerWaals(Pressure, Temperature_C, Gas)
 
-    print('C, ro ', c_gas, ro_gas)
+    # print('C, ro ', c_gas, ro_gas)
     for R in R_bubble_vec:
 
         f_bs = func_formfunc_FluidFiledSphere_Rinf(
@@ -96,7 +96,8 @@ df = pd.concat(results, ignore_index=True)
 #%% Save CSV
 TS_DATABASE_SPHERE_DIR.mkdir(parents=True, exist_ok=True)
 
-filename = f"{Gas}_{Bubble_Depth_start:g}-{Bubble_Depth_end:g}m.csv"
+filename = (f"{Gas}_{Bubble_Depth_start:g}-{Bubble_Depth_end:g}m_"
+            f"{R_bubble_min*1e3:g}-{R_bubble_max*1e3:g}mm.csv")
 filepath = TS_DATABASE_SPHERE_DIR / filename
 
 df.to_csv(filepath, index=False)

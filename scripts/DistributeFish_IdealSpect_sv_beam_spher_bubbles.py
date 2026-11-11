@@ -19,7 +19,9 @@ from sv_modeling.school import place_fish_beam_shell
 from sv_modeling.school import _truncated_normal
 from sv_modeling.scattering import coherent_backscatter_sphericalbubbles
 
-#%% 1. Simulation parameters
+#%% 1. Simulation parameters 
+
+#======================================================
 Observation_point = np.array([0.0, 0.0, 0.0])
 
 Gas = "CO2"
@@ -27,8 +29,8 @@ Gas = "CO2"
 N = 1000
 # seed = 42
 # rng = np.random.default_rng(seed)
-
 rng = np.random.default_rng()
+
 min_dist = 0.01  # Minimum separation between bubbles (m)
 
 Mean_depth = 55.0
@@ -44,13 +46,13 @@ c_w = 1500.0
 R_bubble_min = 0.0005       # m
 R_bubble_max = 0.0020       # m
 R_bubble_resolution = 0.0001  # m
+#======================================================
 
 # Generate targets uniformly in the circular conical shell
 points = place_fish_beam_shell(N, R, DR, beam_half_angle_deg, min_dist, rng)
 
 bubble_radii = _truncated_normal(R_bubble_min, R_bubble_max, N, rng)
 bubble_radii = (R_bubble_min + np.round( (bubble_radii - R_bubble_min) / R_bubble_resolution) * R_bubble_resolution)
-
 bubble_radii = np.clip(bubble_radii, R_bubble_min, R_bubble_max) # N bubbles sizes with normal distribution
 
 
@@ -89,8 +91,8 @@ estimate = estimate_density_sphericalbubbles(
 
 svf = estimate.svf
 
-print(f"Coherent density  : {estimate.coherent:.4f} bubbles/m³")
-print(f"Incoherent density: {estimate.incoherent:.4f} bubbles/m³")
+print(f"Density from Coh. Sv : {estimate.coherent:.4f} bubbles/m³")
+print(f"Density from Incoh. Sv: {estimate.incoherent:.4f} bubbles/m³")
 print(f"True density      : {estimate.true:.4f} bubbles/m³")
 print(f"Coherent/True     : {estimate.coherent / estimate.true:.4f}")
 
@@ -110,7 +112,7 @@ plot_bubble_cloud(points, bubble_radii, source=Observation_point,
 
 # Bubble radius distribution
 ax2 = fig.add_subplot(132)
-bins = np.arange(1000*R_bubble_min, 1000*R_bubble_max, 1000*R_bubble_resolution)
+bins = np.arange(1000*R_bubble_min, 1000*(R_bubble_max+R_bubble_resolution), 1000*R_bubble_resolution)
 ax2.hist(bubble_radii * 1e3, bins=bins, edgecolor="black", alpha=0.7)
 ax2.set_xlabel("Bubble radius (mm)")
 ax2.set_ylabel("Number of bubbles")
