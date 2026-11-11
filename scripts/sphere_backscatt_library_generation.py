@@ -24,8 +24,8 @@ Bubble_Depth_start = 50  # m
 Bubble_Depth_end = 60  # m
 Depth_resolution = 0.05  # m
 
-freq_start = 1000  # Hz
-freq_end = 190000  # Hz
+freq_start = 45000  # Hz
+freq_end = 90000  # Hz
 freq_resolution = 100  # Hz
 
 R_bubble_min = 0.0005  # m
@@ -96,7 +96,7 @@ df = pd.concat(results, ignore_index=True)
 #%% Save CSV
 TS_DATABASE_SPHERE_DIR.mkdir(parents=True, exist_ok=True)
 
-filename = (f"{Gas}_{Bubble_Depth_start:g}-{Bubble_Depth_end:g}m_"
+filename = (f"{Gas}_depth{Bubble_Depth_start:g}-{Bubble_Depth_end:g}m_R"
             f"{R_bubble_min*1e3:g}-{R_bubble_max*1e3:g}mm.csv")
 filepath = TS_DATABASE_SPHERE_DIR / filename
 

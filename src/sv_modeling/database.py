@@ -160,7 +160,8 @@ def Get_bubble_fbs(_Dir, Gas, depth):
 
     # Find CSV covering the requested depth
     pattern = re.compile(
-        rf"{re.escape(Gas)}_(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)m",
+        rf"{re.escape(Gas)}_depth(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)m_R"
+        rf"(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)mm",
         re.IGNORECASE
     )
 
@@ -170,7 +171,7 @@ def Get_bubble_fbs(_Dir, Gas, depth):
         match = pattern.fullmatch(filepath.stem)
 
         if match:
-            d_min, d_max = map(float, match.groups())
+            d_min, d_max = map(float, match.groups()[:2])
 
             if d_min <= depth < d_max:
                 matches.append((d_max - d_min, filepath))
