@@ -110,3 +110,27 @@ def estimate_density(result, ref_range, volume, band_hz):
         sigma_bs_mean=sigma_bs_mean,
         svf=svf,
     )
+
+def estimate_density_sphericalbubbles(
+    freq_hz, p_far, sigma_bs, distances, ref_range, volume, band_hz
+):
+    """Estimate bubble number density from coherent and incoherent backscattering."""
+
+    f1, f2 = band_hz
+    svf = sv_from_pfar(p_far, ref_range, volume)
+    sv_coherent = band_average(svf, freq_hz, f1, f2)
+
+    sigma_bs_bubbles = band_average(sigma_bs, freq_hz, f1, f2, axis=1)
+    sigma_bs_mean = np.mean(sigma_bs_bubbles)
+
+    sv_incoherent = ref_range**4 / volume * np.sum(sigma_bs_bubbles / distances**4)
+
+    return DensityEstimate(
+        coherent=sv_coherent / sigma_bs_mean,
+        incoherent=sv_incoherent / sigma_bs_mean,
+        true=len(distances) / volume,
+        sv_coherent=sv_coherent,
+        sv_incoherent=sv_incoherent,
+        sigma_bs_mean=sigma_bs_mean,
+        svf=svf,
+    )
