@@ -2,7 +2,9 @@
 """
 Simulate coherent broadband backscattering from spherical gas bubbles.
 
-Bubble depths follow a normal distribution around Mean_depth.
+Bubbles are randomly distributed within a conical beam shell
+between slant ranges R-DR/2 and R+DR/2.
+
 Complex f_bs(f) spectra are read from spherical CSV databases.
 """
 
@@ -15,30 +17,39 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from sv_modeling.paths import TS_DATABASE_SPHERE_DIR, output_path
 from sv_modeling.plotting import plot_bubble_cloud
-
+from types import SimpleNamespace
+from sv_modeling.density import estimate_density, beam_shell_volume
+from sv_modeling.school import place_fish_beam_shell
 
 #%% 1. Simulation parameters
 Gas = "CO2"
 
-N = 10000
+N = 500
 seed = 42
 rng = np.random.default_rng(seed)
+min_dist = 0.01  # Minimum separation between bubbles (m)
 
 Mean_depth = 55.0
 Depth_std = 1.0
 
+R = Mean_depth
+DR = 1 * Depth_std
+
+r_min = R - DR / 2
+r_max = R + DR / 2
+
 beam_half_angle_deg = 3.5
 beam_half_angle = np.deg2rad(beam_half_angle_deg)
 
-R_bubble_min = 0.0005
-R_bubble_max = 0.0020
-
+R_bubble_min = 0.0005 # m
+R_bubble_max = 0.0020 # m
+R_bubble_resolution = 0.0001 # m
 c_w = 1500.0
 Observation_point = np.array([0.0, 0.0, 0.0])
 
-# Database coverage: approximately 99.7% of a normal distribution
-required_min = Mean_depth - 3 * Depth_std
-required_max = Mean_depth + 3 * Depth_std
+# Required database depth coverage for the conical beam shell
+required_min = r_min * np.cos(beam_half_angle)
+required_max = r_max
 
 
 #%% 2. Find CSV databases covering the requested depth interval
@@ -119,32 +130,17 @@ if depth_db.min() > required_min or depth_db.max() < required_max:
     raise ValueError("Actual CSV depth values do not cover the requested ±3σ interval")
 
 
-#%% 4. Generate normally distributed bubble depths
-# Rejection sampling avoids clipping bubbles onto the database boundaries
-depths = np.empty(N)
-remaining = np.arange(N)
+#%% 4. Generate bubble positions within the conical beam shell
 
-while remaining.size:
-    samples = rng.normal(Mean_depth, Depth_std, remaining.size)
-    valid = (samples >= depth_db.min()) & (samples <= depth_db.max())
-    depths[remaining[valid]] = samples[valid]
-    remaining = remaining[~valid]
+points = place_fish_beam_shell(
+    N, R, DR, beam_half_angle_deg, min_dist, rng
+)
 
-
-#%% 5. Generate 3D bubble positions within the acoustic beam
-azimuth = rng.uniform(0, 2*np.pi, N)
-cos_alpha = rng.uniform(np.cos(beam_half_angle), 1.0, N)
-alpha = np.arccos(cos_alpha)
-
-x = depths * np.tan(alpha) * np.cos(azimuth)
-y = depths * np.tan(alpha) * np.sin(azimuth)
-z = depths
-
-points = np.column_stack((x, y, z))
 ranges = np.linalg.norm(points - Observation_point, axis=1)
+depths = points[:, 2]
 
 
-#%% 6. Assign bubble radii
+#%% 5. Assign bubble radii
 available_radii = radius_db[(radius_db >= R_bubble_min) & (radius_db <= R_bubble_max)]
 
 if available_radii.size == 0:
@@ -153,7 +149,7 @@ if available_radii.size == 0:
 bubble_radii = rng.choice(available_radii, size=N)
 
 
-#%% 7. Select complex f_bs(f) for each bubble
+#%% 6. Select complex f_bs(f) for each bubble
 # Nearest-neighbor depth lookup; exact radius lookup
 depth_idx = np.abs(depth_db[:, None] - depths[None, :]).argmin(axis=0)
 radius_idx = np.searchsorted(radius_db, bubble_radii)
@@ -165,7 +161,7 @@ print(f"Mean simulated depth: {depths.mean():.3f} m")
 print(f"Bubble spectra shape: {f_bs_bubbles.shape}")
 
 
-#%% 8. Coherent broadband backscattering
+#%% 7. Coherent broadband backscattering
 k = 2 * np.pi * freq_vec / c_w
 
 # Two-way propagation phase and spreading
@@ -177,6 +173,32 @@ p_far = np.sum(p_bubbles, axis=0)
 power_coherent = np.abs(p_far)**2
 power_incoherent = np.sum(np.abs(p_bubbles)**2, axis=0)
 
+#%% 8. Volume backscattering and number density estimation
+
+# Volume of the conical beam shell bounded by slant range
+V = beam_shell_volume(R, DR, beam_half_angle_deg)
+
+# Prepare bubble scattering result
+result = SimpleNamespace(
+    p_far=p_far,
+    freq_hz=freq_vec,
+    sigma_bs=np.abs(f_bs_bubbles)**2,
+    distances=ranges
+)
+
+f1 = 45000.0
+f2 = 90000.0
+
+estimate = estimate_density(result, R, V, (f1, f2))
+
+svf = estimate.svf
+svf_incoherent = power_incoherent * R**4 / V
+
+print(f"Volume               : {V:.3f} m³")
+print(f"True density         : {estimate.true:.3f} bubbles/m³")
+print(f"Coherent density     : {estimate.coherent:.3f} bubbles/m³")
+print(f"Incoherent density   : {estimate.incoherent:.3f} bubbles/m³")
+
 
 #%% 9. Plot bubble distribution and spectra
 fig = plt.figure(figsize=(16, 5))
@@ -187,22 +209,24 @@ plot_bubble_cloud(points, bubble_radii, source=Observation_point,
                   source_direction=(0, 0, 1), beam_half_angle_deg=beam_half_angle_deg,
                   ax=ax1, margin=1.1, view=(15, -55), invert_z=True, size_scale=2)
 
-# Depth distribution
+# Bubble radius distribution
 ax2 = fig.add_subplot(132)
-ax2.hist(depths, bins=25, edgecolor="black", alpha=0.7)
-ax2.axvline(Mean_depth, color="red", linestyle="--", label="Mean depth")
-ax2.set_xlabel("Depth (m)")
-ax2.set_ylabel("Number of bubbles")
-ax2.set_title(f"Normal depth distribution (σ={Depth_std:g} m)")
-ax2.legend()
 
-# Broadband backscattering spectra
+ax2.hist(bubble_radii * 1e3, bins=20,
+         edgecolor="black", alpha=0.7)
+
+ax2.set_xlabel("Bubble radius (mm)")
+ax2.set_ylabel("Number of bubbles")
+ax2.set_title(f"Bubble size distribution (N={N})")
+ax2.grid(True, alpha=0.3)
+
+# Volume backscattering strength
 ax3 = fig.add_subplot(133)
-ax3.plot(freq_vec/1e3, 10*np.log10(np.maximum(power_coherent, 1e-300)), label="Coherent")
-ax3.plot(freq_vec/1e3, 10*np.log10(np.maximum(power_incoherent, 1e-300)), "--", label="Incoherent")
+ax3.plot(freq_vec/1e3, 10*np.log10(np.maximum(svf, 1e-300)), label="Coherent")
+ax3.plot(freq_vec/1e3, 10*np.log10(np.maximum(svf_incoherent, 1e-300)), "--", label="Incoherent")
 ax3.set_xlabel("Frequency (kHz)")
-ax3.set_ylabel("Relative level (dB)")
-ax3.set_title("Combined bubble backscattering")
+ax3.set_ylabel(r"$S_v(f)$ (dB re 1 m$^{-1}$)")
+ax3.set_title("Volume backscattering strength")
 ax3.grid(True)
 ax3.legend()
 
