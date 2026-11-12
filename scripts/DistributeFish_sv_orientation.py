@@ -82,7 +82,7 @@ min_dist = 0.1  # m, minimum distance between fish
 Average_school_Depth = 50  # m
 
 # Orientation ranges (deg). Theta: azimuth in XY plane from +X. Phi: angle from +Z.
-theta_range_deg = (-90.01, 0.01)
+theta_range_deg = (-0.01, 0.01)
 phi_range_deg = (89.99, 90.01)
 
 # I. Fish positions, no overlap
