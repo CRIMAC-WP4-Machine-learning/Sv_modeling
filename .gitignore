@@ -12,6 +12,8 @@ outputs/*
 
 # Ignore all data files and subdirectories
 data/*
+
+outputs/
 # Keep the placeholder file
 !data/.gitkeep
 
@@ -24,5 +26,6 @@ data/*
 
 # Windows download markers
 *:Zone.Identifier
+
 
 

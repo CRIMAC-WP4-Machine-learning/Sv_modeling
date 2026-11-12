@@ -8,6 +8,7 @@ import pandas as pd
 
 from sv_modeling.database import Find_closestfile_in_database
 from sv_modeling.geometry import Get_Angle
+from sv_modeling.database import Get_bubble_fbs, Get_bubble_ith_spectrum
 
 SOUND_SPEED = 1500.0  # m/s
 
@@ -138,3 +139,60 @@ def total_ts(p_far, ref_distance):
     TS = 20 log10 |ref_distance**2 * p_far|
     """
     return 20 * np.log10(np.abs(ref_distance**2 * np.asarray(p_far)))
+
+
+def coherent_backscatter_sphericalbubbles(
+    points, bubble_radii, database_dir, gas,
+    observation_point=(0.0, 0.0, 0.0),
+    sound_speed=SOUND_SPEED, transducer_depth=0.0
+):
+    """Coherently sum backscattering from N spherical bubbles.
+
+    Returns
+    -------
+    freq_hz : ndarray, shape (F,)
+    p_far : ndarray, shape (F,), complex
+    sigma_bs : ndarray, shape (N, F)
+    distances : ndarray, shape (N,)
+    """
+    points = np.atleast_2d(np.asarray(points, dtype=float))
+    bubble_radii = np.asarray(bubble_radii, dtype=float)
+    observation_point = np.asarray(observation_point, dtype=float)
+
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError("points must have shape (N, 3)")
+
+    n_bubbles = len(points)
+    if bubble_radii.shape != (n_bubbles,):
+        raise ValueError("bubble_radii must have shape (N,)")
+    if n_bubbles == 0:
+        raise ValueError("At least one bubble is required")
+
+    distances = np.linalg.norm(points - observation_point, axis=1)
+    if np.any(distances == 0):
+        raise ValueError("Bubble cannot be at the observation point")
+
+    depths = transducer_depth + points[:, 2]
+
+    freq_hz = None
+    p_far = None
+    sigma_bs = None
+
+    df = Get_bubble_fbs(database_dir, gas, depths[0])
+    
+    for ii in range(n_bubbles):
+        freq_ii, f_bs_ii = Get_bubble_ith_spectrum(df, depths[ii], bubble_radii[ii])
+
+        if freq_hz is None:
+            freq_hz = freq_ii
+            p_far = np.zeros(len(freq_hz), dtype=complex)
+            sigma_bs = np.zeros((n_bubbles, len(freq_hz)))
+            k = 2 * np.pi * freq_hz / sound_speed
+
+        elif not np.allclose(freq_ii, freq_hz, rtol=0, atol=1e-6):
+            raise ValueError("Different frequency grids in bubble databases")
+
+        p_far += f_bs_ii / distances[ii]**2 * np.exp(-2j * k * distances[ii])
+        sigma_bs[ii] = np.abs(f_bs_ii)**2
+
+    return freq_hz, p_far, sigma_bs, distances
