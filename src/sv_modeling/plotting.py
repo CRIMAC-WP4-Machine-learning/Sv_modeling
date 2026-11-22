@@ -11,6 +11,7 @@ def plot_fish_school(
     ax=None,
     length=0.2,
     margin=1.0,
+    linewidth = 1.5,
     view=None,
     invert_z=False,
 ):
@@ -37,8 +38,25 @@ def plot_fish_school(
     ax.quiver(
         _points[:, 0], _points[:, 1], _points[:, 2],
         _orientations[:, 0], _orientations[:, 1], _orientations[:, 2],
-        length=length, normalize=True,
+        length=length,
+        normalize=True,
+        linewidths=linewidth,
     )
+    # # Plot each fish as a 3D line segment
+    # for point, orientation in zip(_points, _orientations):
+
+    #     direction = orientation / np.linalg.norm(orientation)
+
+    #     start = point - 0.5 * length * direction
+    #     end = point + 0.5 * length * direction
+
+    #     ax.plot(
+    #         [start[0], end[0]],
+    #         [start[1], end[1]],
+    #         [start[2], end[2]],
+    #         color="blue",
+    #         linewidth=1.5
+    #     )
 
     max_range = np.array([
         _points[:, 0].max() - _points[:, 0].min(),

@@ -27,12 +27,13 @@ Figures are written to outputs/.
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from matplotlib.ticker import FormatStrFormatter
 
 from sv_modeling.database import Extract_database_metadata
 from sv_modeling.density import beam_shell_volume, estimate_density
 from sv_modeling.paths import FEMBEM_DIR, TS_DATABASE_150HZ_DIR, output_path
-from sv_modeling.plotting import plot_fish_school
+from sv_modeling.plotting import plot_fish_school, _cone_surface
 from sv_modeling.school import orient_fish, place_fish_beam_shell
 from sv_modeling.scattering import coherent_backscatter
 from sv_modeling.signals import func_Gen_SweepSig_Explicit  # noqa: F401 (used in commented-out block)
@@ -143,151 +144,19 @@ DR = School_thikness
 points = place_fish_beam_shell(N, R, DR, beam_half_angle_deg, min_dist, rng)
 
 #|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-# ---------------------------------------------------------
-# EK80-style split-beam angular coordinates
-# ---------------------------------------------------------
 
-# slant_range = np.linalg.norm(points, axis=1)
-# angle_alongship = np.rad2deg(np.arcsin(np.clip(points[:, 0] / slant_range, -1, 1)))
-# angle_athwartship = np.rad2deg(np.arcsin(np.clip(points[:, 1] / slant_range, -1, 1)))
-
-# # True off-axis angle from the acoustic axis
-# off_axis_angle = np.rad2deg(np.arccos(np.clip(points[:, 2] / slant_range, -1, 1)))
-
-# # Verification
-# print("Number of targets:", len(points))
-# print("Minimum range:", slant_range.min())
-# print("Maximum range:", slant_range.max())
-
-# print("Alongship angle limits:", angle_alongship.min(), angle_alongship.max())
-# print("Athwartship angle limits:", angle_athwartship.min(), angle_athwartship.max())
-# print("Maximum off-axis angle:", off_axis_angle.max())
-
-
-# #%% Plot simulated target positions
-
-# x = points[:, 0]
-# y = points[:, 1]
-# z = points[:, 2]
-
-# slant_range = np.linalg.norm(points, axis=1)
-
-# # EK80-style angular coordinates (degrees)
-# angle_alongship = np.rad2deg(np.arcsin(np.clip(x / slant_range, -1, 1)))
-# angle_athwartship = np.rad2deg(np.arcsin(np.clip(y / slant_range, -1, 1)))
-
-# fig = plt.figure(figsize=(16, 5))
-# # ---------------------------------------------------------
-# # 1. 3D target distribution
-# # ---------------------------------------------------------
-# ax1 = fig.add_subplot(131, projection="3d")
-
-# sc = ax1.scatter(x, y, z, c=z, cmap="viridis", s=15, alpha=0.8)
-
-# ax1.set_xlabel("Alongship X (m)")
-# ax1.set_ylabel("Athwartship Y (m)")
-# ax1.set_zlabel("Depth Z (m)")
-# ax1.set_title(f"3D target distribution (N={len(points)})")
-
-# # Equal spatial scaling
-# max_span = max(np.ptp(x), np.ptp(y), np.ptp(z))
-# half_span = max_span / 2
-
-# mid_x = (x.max() + x.min()) / 2
-# mid_y = (y.max() + y.min()) / 2
-# mid_z = (z.max() + z.min()) / 2
-
-# ax1.set_xlim(mid_x - half_span, mid_x + half_span)
-# ax1.set_ylim(mid_y - half_span, mid_y + half_span)
-# ax1.set_zlim(mid_z + half_span, mid_z - half_span)
-
-# ax1.set_box_aspect((1, 1, 1))
-
-# fig.colorbar(sc, ax=ax1, shrink=0.65, label="Depth (m)")
-
-# # ---------------------------------------------------------
-# # 2. XY projection (looking down the beam)
-# # ---------------------------------------------------------
-# ax2 = fig.add_subplot(132)
-
-# ax2.scatter(x, y, s=15, alpha=0.8)
-
-# # Beam boundary at mean slant range
-# beam_radius = R * np.sin(beam_half_angle)
-# t = np.linspace(0, 2*np.pi, 360)
-
-# ax2.plot(beam_radius * np.cos(t), beam_radius * np.sin(t), "r--", linewidth=1.5, label="Beam boundary")
-
-# ax2.set_xlabel("Alongship X (m)")
-# ax2.set_ylabel("Athwartship Y (m)")
-# ax2.set_title("XY projection")
-# ax2.set_aspect("equal")
-# ax2.grid(True)
-# ax2.legend()
-
-# # ---------------------------------------------------------
-# # 3. EK80 alongship / athwartship angle plot
-# # ---------------------------------------------------------
-# ax3 = fig.add_subplot(133)
-
-# ax3.scatter(angle_alongship,  angle_athwartship, s=15, alpha=0.8)
-
-# # Exact circular-cone boundary in split-beam coordinates
-# t = np.linspace(0, 2*np.pi, 360)
-# angle_boundary_al = np.rad2deg(np.arcsin(np.sin(beam_half_angle) * np.cos(t)))
-# angle_boundary_at = np.rad2deg(np.arcsin(np.sin(beam_half_angle) * np.sin(t)))
-
-# ax3.plot(angle_boundary_al, angle_boundary_at, "r--", linewidth=1.5, label="Beam boundary")
-
-# ax3.set_xlabel("Alongship angle (deg)")
-# ax3.set_ylabel("Athwartship angle (deg)")
-# ax3.set_title("Target positions in beam")
-# ax3.set_aspect("equal")
-# ax3.grid(True)
-# ax3.legend()
-
-# plt.tight_layout()
-# plt.show()
-#|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
 
 # II. Orientation of fish
 # Ranges (deg). Theta: azimuth in XY plane from +X. Phi: angle from +Z.
 theta_range_deg = (-0.001, 0.001)
-phi_range_deg = (89.999, 90.001)
+phi_range_deg = (75.999, 105.001)
 
 # "normal" or "uniform" within the ranges
 orientations, theta, phi = orient_fish(N, theta_range_deg, phi_range_deg, rng, distribution="normal")
 
 
-#%% Fish aggregate volume and number density
-# ---------------------------------------------------------------
-# Fish are randomly distributed inside a circular conical shell
-# defined by the echosounder beam and a slant-range interval.
-#
-# R       : Mean slant range (m)
-# DR      : Range thickness (m)
-# alpha   : Beam half-opening angle (radians)
-# r_min   : R - DR/2
-# r_max   : R + DR/2
-#
-# The volume is obtained by integrating the spherical volume
-# element dV = r² sin(theta) dr dtheta dphi over:
-#   r     : [r_min, r_max]
-#   theta : [0, alpha]
-#   phi   : [0, 2*pi]
-#
-# Exact volume:
-#   V = (2*pi/3) * (1 - cos(alpha)) * (r_max³ - r_min³)
-#
-# Narrow-beam, thin-shell approximation:
-#   V ≈ pi * R² * alpha² * DR
-#
-# Fish number density:
-#   rho_N = N / V   [fish/m³]
-#
-# Note: V is the beam-sampled volume, not necessarily the volume
-# of the entire fish school if it extends beyond the beam.
+
 # ---------------------------------------------------------------
 
 # Exact beam-sampled volume (m³); approximate=True gives the narrow-beam form
@@ -349,8 +218,8 @@ sigma_bs_fish = result.sigma_bs  # sigma_bs(f) for every fish, shape (N, F)
 
 #%% Number density estimation for selected frequency band (flat spectral weighting)
 
-f1 = 38000.0
-f2 = 70000.0
+f1 = 20000.0
+f2 = 80000.0
 
 estimate = estimate_density(result, R, V, (f1, f2))
 svf = estimate.svf  # coherent s_v(f) over all frequencies
@@ -360,6 +229,28 @@ print(f"Incoherent density: {estimate.incoherent:.4f} fish/m³")
 print(f"True density     : {estimate.true:.4f} fish/m³")
 print(f"Coherent/True    : {estimate.coherent / estimate.true:.4f}")
 
+# Append results to CSV (create file if it doesn't exist)
+csv_path = output_path("density_estimation_results.csv")
+
+results = {
+    "f1_Hz": f1,
+    "f2_Hz": f2,
+    "coherent_density_fish_m3": estimate.coherent,
+    "incoherent_density_fish_m3": estimate.incoherent,
+    "true_density_fish_m3": estimate.true,
+    "coherent_true_ratio": estimate.coherent / estimate.true,
+}
+
+df_results = pd.DataFrame([results])
+df_results.to_csv(
+    csv_path,
+    mode="a",
+    header=not csv_path.exists(),
+    index=False,
+    float_format="%.8f"
+)
+
+print("Results saved to:", csv_path)
 
 #%% ====================================================
 
@@ -391,6 +282,34 @@ ax3 = fig.add_subplot(233, projection="3d")
 pos = ax3.get_position()
 ax3.set_position([pos.x0-0.15, pos.y0-0.5, pos.width*2.6, pos.height*2.8])
 plot_fish_school(points, orientations, ax3, length=0.3, margin=1.1, view=(12, -55), invert_z=True)
+
+# Acoustic beam
+source = np.array([0.0, 0.0, 0.0])
+direction = np.array([0.0, 0.0, 1.0])  # +Z downward
+
+# Draw the cone over the fish-school range interval
+h_min = R - DR / 2
+h_max = R + DR / 2
+
+X, Y, Z = _cone_surface(
+    source,
+    direction,
+    beam_half_angle_deg,
+    h_min,
+    h_max
+)
+
+ax3.plot_surface(
+    X, Y, Z,
+    color="orange",
+    alpha=0.12,
+    linewidth=0
+)
+
+# Cone boundaries
+for k in (0, -1):
+    ax3.plot(X[k], Y[k], Z[k], color="orange", linewidth=1.5)
+
 ax3.set_xlabel("X (m)", fontsize=12)
 ax3.set_ylabel("Y (m)", fontsize=12)
 ax3.set_zlabel("Z (m)", fontsize=12)
@@ -402,7 +321,8 @@ ax3.tick_params(axis="z", labelsize=10)
 ax4 = fig.add_subplot(234)
 pos = ax4.get_position()
 ax4.set_position([pos.x0-0.04, pos.y0 - 0.00, pos.width * 2.1, pos.height * 0.8])
-ax4.plot(freq_vec/1000,svf, color =[0,0,0])
+# ax4.plot(freq_vec/1000,svf, color =[0,0,0])
+ax4.plot(freq_vec/1e3, 10*np.log10(np.maximum(svf, 1e-300)), label="Coherent")
 ax4.set_xlabel("Frequency (kHz)", fontsize=12)
 ax4.set_ylabel(r'$s_v\;(\mathrm{m}^2\,\mathrm{m}^{-3})$', fontsize=12)
 

@@ -33,10 +33,10 @@ rng = np.random.default_rng()
 
 min_dist = 0.002  # Minimum separation between bubbles (m)
 
-Mean_depth = 55.0
-# Depth_std = 1.0
-R = Mean_depth
-DR = 1 # Layer thickness
+R = 55.0          # Mean slant range (m)
+DR = 1.0          # Slant-range shell thickness (m)
+
+transducer_depth = 0.0  # Depth below sea surface (m)
 
 beam_half_angle_deg = 3.5
 beam_half_angle = np.deg2rad(beam_half_angle_deg)
@@ -52,13 +52,24 @@ R_bubble_resolution = 0.0001  # m
 points = place_fish_beam_shell(N, R, DR, beam_half_angle_deg, min_dist, rng)
 
 # Generate N bubble radii from a truncated normal distribution
-bubble_radii = _truncated_normal(R_bubble_min, R_bubble_max, N, rng)
+bubble_radii = _truncated_normal(
+    R_bubble_min, R_bubble_max, N, rng
+)
 
-# Round radii to the nearest specified resolution (i.e., R_bubble_resolution)
-bubble_radii = (R_bubble_min + np.round( (bubble_radii - R_bubble_min) / R_bubble_resolution) * R_bubble_resolution)
+# Quantize radii to the database resolution
+radius_indices = np.rint(
+    (bubble_radii - R_bubble_min) / R_bubble_resolution
+).astype(int)
 
-# Ensure all radii remain within the specified limits: [R_bubble_min, R_bubble_max]
-bubble_radii = np.clip(bubble_radii, R_bubble_min, R_bubble_max) # N bubbles sizes with normal distribution
+n_radius_steps = round(
+    (R_bubble_max - R_bubble_min) / R_bubble_resolution
+)
+
+radius_indices = np.clip(radius_indices, 0, n_radius_steps)
+
+bubble_radii = (
+    R_bubble_min + radius_indices * R_bubble_resolution
+)
 
 
 
