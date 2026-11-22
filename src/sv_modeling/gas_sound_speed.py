@@ -40,27 +40,34 @@ def func_c_gas(T_celsius, gas="O2"):
     Calculate gas sound speed using c = sqrt(kRT).
 
     T_celsius : Temperature (°C), scalar or NumPy array
-    gas       : "O2" or "CO"
+    gas : str
+        Gas type (case-insensitive): "Air", "O2", "CO", "CO2", "CH4", "C2H6".
 
     Returns
     -------
     c_gas : Gas sound speed (m/s), scalar or NumPy array
     """
 
-    gas = gas.upper()
-    if gas not in GAS_PROPERTIES:
-        raise ValueError(f"Unknown gas: {gas}")
+    # Match gas names case-insensitively
+    gas_lookup = {key.upper(): key for key in GAS_PROPERTIES}
 
-    R = GAS_PROPERTIES[gas]["R"]
-    k = GAS_PROPERTIES[gas]["k"]
-    T = T_celsius + 273.15
+    gas_key = gas_lookup.get(gas.strip().upper())
+
+    if gas_key is None:
+        raise ValueError(
+            f"Unknown gas '{gas}'. Available gases: {', '.join(GAS_PROPERTIES)}"
+        )
+
+    R = GAS_PROPERTIES[gas_key]["R"]
+    k = GAS_PROPERTIES[gas_key]["k"]
+    T = np.asarray(T_celsius, dtype=float) + 273.15
 
     if not np.all(np.isfinite(T)) or np.any(T <= 0):
         raise ValueError("Temperature must be above absolute zero.")
 
-    c_gas = (k*R*T)**0.5
+    c_gas = np.sqrt(k*R*T)
     
 
-    return c_gas
+    return c_gas.item() if c_gas.ndim == 0 else c_gas
 
 

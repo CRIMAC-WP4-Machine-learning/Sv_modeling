@@ -178,10 +178,15 @@ def coherent_backscatter_sphericalbubbles(
     p_far = None
     sigma_bs = None
 
-    df = Get_bubble_fbs(database_dir, gas, depths[0])
+    # df = Get_bubble_fbs(database_dir, gas, depths[0])
     
     for ii in range(n_bubbles):
-        freq_ii, f_bs_ii = Get_bubble_ith_spectrum(df, depths[ii], bubble_radii[ii])
+
+        df = Get_bubble_fbs(database_dir, gas, depths[ii])
+
+        freq_ii, f_bs_ii = Get_bubble_ith_spectrum(
+            df, depths[ii], bubble_radii[ii]
+        )
 
         if freq_hz is None:
             freq_hz = freq_ii
@@ -189,10 +194,16 @@ def coherent_backscatter_sphericalbubbles(
             sigma_bs = np.zeros((n_bubbles, len(freq_hz)))
             k = 2 * np.pi * freq_hz / sound_speed
 
-        elif not np.allclose(freq_ii, freq_hz, rtol=0, atol=1e-6):
+        elif freq_ii.shape != freq_hz.shape or not np.allclose(
+            freq_ii, freq_hz, rtol=0, atol=1e-6
+        ):
             raise ValueError("Different frequency grids in bubble databases")
 
-        p_far += f_bs_ii / distances[ii]**2 * np.exp(-2j * k * distances[ii])
+        p_far += (
+            f_bs_ii / distances[ii]**2
+            * np.exp(-2j * k * distances[ii])
+        )
+
         sigma_bs[ii] = np.abs(f_bs_ii)**2
 
     return freq_hz, p_far, sigma_bs, distances

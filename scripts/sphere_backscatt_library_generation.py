@@ -32,7 +32,7 @@ R_bubble_min = 0.0005  # m
 R_bubble_max = 0.002  # m
 R_bubble_resolution = 0.0001  # m
 
-Gas = "C2H6"
+Gas = "CH4"
 P0 = 1e5
 ro_w = 1027  # kg/m^3
 c_w = 1500  # m/s
@@ -40,9 +40,9 @@ Temperature_C = 10  # Celsius
 
 
 #%% Initial calculations
-D_vec = np.arange(Bubble_Depth_start, Bubble_Depth_end, Depth_resolution)
-freq_vec = np.arange(freq_start, freq_end, freq_resolution)
-R_bubble_vec = np.arange(R_bubble_min, R_bubble_max, R_bubble_resolution)
+D_vec = np.arange(Bubble_Depth_start, Bubble_Depth_end + 0.1 * Depth_resolution, Depth_resolution)
+freq_vec = np.arange(freq_start, freq_end + 0.1 * freq_resolution, freq_resolution)
+R_bubble_vec = np.arange(R_bubble_min, R_bubble_max + 0.1 * R_bubble_resolution, R_bubble_resolution)
 
 c_gas = func_c_gas(Temperature_C, Gas)
 

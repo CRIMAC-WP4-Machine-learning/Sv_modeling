@@ -26,12 +26,12 @@ Observation_point = np.array([0.0, 0.0, 0.0])
 
 Gas = "CO2"
 
-N = 1000
+N = 500
 # seed = 42
 # rng = np.random.default_rng(seed)
 rng = np.random.default_rng()
 
-min_dist = 0.01  # Minimum separation between bubbles (m)
+min_dist = 0.002  # Minimum separation between bubbles (m)
 
 Mean_depth = 55.0
 # Depth_std = 1.0
@@ -51,8 +51,13 @@ R_bubble_resolution = 0.0001  # m
 # Generate targets uniformly in the circular conical shell
 points = place_fish_beam_shell(N, R, DR, beam_half_angle_deg, min_dist, rng)
 
+# Generate N bubble radii from a truncated normal distribution
 bubble_radii = _truncated_normal(R_bubble_min, R_bubble_max, N, rng)
+
+# Round radii to the nearest specified resolution (i.e., R_bubble_resolution)
 bubble_radii = (R_bubble_min + np.round( (bubble_radii - R_bubble_min) / R_bubble_resolution) * R_bubble_resolution)
+
+# Ensure all radii remain within the specified limits: [R_bubble_min, R_bubble_max]
 bubble_radii = np.clip(bubble_radii, R_bubble_min, R_bubble_max) # N bubbles sizes with normal distribution
 
 

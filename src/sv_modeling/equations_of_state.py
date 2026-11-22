@@ -47,20 +47,27 @@ def func_VanDerWaals(P_pa, T_celsius, gas="O2"):
 
     P_pa      : Absolute pressure (Pa), scalar or NumPy array
     T_celsius : Temperature (°C), scalar or NumPy array
-    gas       : "O2" or "CO"
+    gas : str
+        Gas type (case-insensitive): "Air", "O2", "CO", "CO2", "CH4", "C2H6".
 
     Returns
     -------
     rho : Gas density (kg/m³), scalar or NumPy array
     """
 
-    gas = gas.upper()
-    if gas not in GAS_PROPERTIES:
-        raise ValueError(f"Unknown gas: {gas}")
+    # Match gas names case-insensitively
+    gas_lookup = {key.upper(): key for key in GAS_PROPERTIES}
 
-    R = GAS_PROPERTIES[gas]["R"]
-    T_cr = GAS_PROPERTIES[gas]["T_cr"]
-    P_cr = GAS_PROPERTIES[gas]["P_cr"]
+    gas_key = gas_lookup.get(gas.strip().upper())
+
+    if gas_key is None:
+        raise ValueError(
+            f"Unknown gas '{gas}'. Available gases: {', '.join(GAS_PROPERTIES)}"
+        )
+
+    R = GAS_PROPERTIES[gas_key]["R"]
+    T_cr = GAS_PROPERTIES[gas_key]["T_cr"]
+    P_cr = GAS_PROPERTIES[gas_key]["P_cr"]
 
     P, T_c = np.broadcast_arrays(np.asarray(P_pa, dtype=float), np.asarray(T_celsius, dtype=float))
     T = T_c + 273.15
