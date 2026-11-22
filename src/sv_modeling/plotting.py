@@ -182,3 +182,77 @@ def plot_school_and_source(
     ax.set_zlabel("z (m)")
     ax.legend(loc="upper left", fontsize=8)
     return ax
+
+def plot_bubble_cloud(points, radii, source=(0, 0, 0), source_direction=(0, 0, 1),
+                      beam_half_angle_deg=None, ax=None, margin=1.05,
+                      view=(15, -55), invert_z=True, size_scale=2):
+    """Plot bubble positions and the acoustic beam in 3D.
+
+    Bubble marker areas are proportional to radius squared, but exaggerated
+    for visibility. Physical bubble radii are specified in metres.
+    """
+    points = np.asarray(points, dtype=float)
+    radii = np.asarray(radii, dtype=float)
+    source = np.asarray(source, dtype=float)
+    d = np.asarray(source_direction, dtype=float)
+    d /= np.linalg.norm(d)
+
+    if points.ndim != 2 or points.shape[1] != 3 or len(points) == 0:
+        raise ValueError("points must have shape (N, 3) with N > 0")
+    if radii.shape != (len(points),) or np.any(radii <= 0):
+        raise ValueError("radii must contain one positive radius per bubble")
+
+    if ax is None:
+        fig = plt.figure(figsize=(8, 8))
+        ax = fig.add_subplot(111, projection="3d")
+
+    centre = (points.min(axis=0) + points.max(axis=0)) / 2
+    reach = np.dot(centre - source, d)
+    half = np.abs(points - centre).max()
+
+    if beam_half_angle_deg is not None and reach > 0:
+        half = max(half, reach * np.tan(np.deg2rad(beam_half_angle_deg)))
+
+    half = max(half * margin, 1e-9)
+
+    # Bubble positions; marker areas scale with physical radius squared
+    sizes = size_scale * (radii / radii.min())**2
+    sc = ax.scatter(points[:, 0], points[:, 1], points[:, 2],
+                    s=sizes, c=radii * 1e3, cmap="BuPu",
+                    alpha=0.7, edgecolors="none", depthshade=True)
+
+    # Beam axis
+    h_lo, h_hi = max(reach - half, 0.0), reach + half
+    beam_line = np.stack([source + d * h_lo, source + d * h_hi])
+    ax.plot(beam_line[:, 0], beam_line[:, 1], beam_line[:, 2],
+            "r--", lw=1, label="Beam axis")
+
+    # Beam cone
+    if beam_half_angle_deg is not None:
+        X, Y, Z = _cone_surface(source, d, beam_half_angle_deg, h_lo, h_hi)
+        ax.plot_surface(X, Y, Z, color="yellow", alpha=0.10, linewidth=0)
+        for k in (0, -1):
+            ax.plot(X[k], Y[k], Z[k], color="yellow", lw=1)
+
+    # Sound propagation direction
+    arrow_length = 0.12 * half
+    ax.quiver(*(source + d * (h_hi - arrow_length)), *d, length=arrow_length,
+              color="red", lw=2, arrow_length_ratio=0.7, normalize=True)
+
+    # Equal axis scaling
+    ax.set_xlim(centre[0] - half, centre[0] + half)
+    ax.set_ylim(centre[1] - half, centre[1] + half)
+    ax.set_zlim(centre[2] - half, centre[2] + half)
+    ax.set_box_aspect((1, 1, 1))
+
+    ax.view_init(elev=view[0], azim=view[1])
+    if invert_z:
+        ax.invert_zaxis()
+
+    ax.set_xlabel("X (m)")
+    ax.set_ylabel("Y (m)")
+    ax.set_zlabel("Depth Z (m)")
+    ax.set_title(f"Bubble cloud: N={len(points)}, mean depth={points[:, 2].mean():.2f} m")
+    ax.figure.colorbar(sc, ax=ax, shrink=0.6, pad=0.1, label="Bubble radius (mm)")
+
+    return ax

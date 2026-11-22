@@ -6,6 +6,7 @@ import re
 
 import numpy as np
 import pandas as pd
+from functools import lru_cache
 
 # Parameters encoded in database filenames, e.g.
 # ts_vs_freq_loop_herring_a_0.01000_b_0.00400_..._IncAngle_90_depth_50_length_0.0_iterRef_LU.csv
@@ -120,3 +121,137 @@ def func_get_frq_TS_fbs_Dict(_Dir, _Inp_Dict, _Lfish):
         Fbs_vec0 = Fbs_vec0.astype(complex)
 
     return freq_vec0, TS_vec0, Fbs_vec0
+
+
+
+
+def Get_bubble_fbs(_Dir, Gas, depth):
+    """
+    Load the gas-bubble scattering database covering the requested depth.
+
+    Selects the CSV file with the narrowest depth interval containing
+    the requested depth.
+
+    Example
+    -------
+    Gas = "CO2", depth = 53
+    -> CO2_depth50-60m_R0.5-2mm.csv
+
+    Parameters
+    ----------
+    _Dir : str or Path
+        Directory containing the scattering database CSV files.
+    Gas : str
+        Gas type, e.g. "O2", "CO2", "C2H6".
+    depth : float
+        Requested bubble depth (m).
+
+    Returns
+    -------
+    df : pandas.DataFrame
+        Scattering database containing depth_m, radius_m,
+        frequency_Hz, and complex f_bs.
+    """
+
+    from pathlib import Path
+
+    database_dir = Path(_Dir)
+
+    # Find CSV covering the requested depth
+    pattern = re.compile(
+        rf"{re.escape(Gas)}_depth(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)m_R"
+        rf"(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)mm",
+        re.IGNORECASE
+    )
+
+    matches = []
+
+    for filepath in database_dir.glob("*.csv"):
+        match = pattern.fullmatch(filepath.stem)
+
+        if match:
+            d_min, d_max = map(float, match.groups()[:2])
+
+            if d_min <= depth <= d_max:
+                matches.append((d_max - d_min, filepath))
+
+    if not matches:
+        raise FileNotFoundError(
+            f"No {Gas} database covering depth {depth} m"
+        )
+
+    # Select narrowest matching interval
+    filepath = min(matches, key=lambda x: x[0])[1]
+
+    # Read CSV
+    df = _read_bubble_database(str(filepath))
+
+    return df
+
+def Get_bubble_ith_spectrum(
+    df, depth, radius,
+    depth_tolerance=0.5,
+    radius_tolerance=0.00005
+):
+    """
+    Extract the nearest available bubble spectrum.
+
+    Raises ValueError if the requested depth or radius is
+    outside the database range or exceeds the allowed tolerance.
+    """
+
+    # Find nearest available depth
+    depth_values = np.sort(df["depth_m"].unique())
+
+    # To enforce the documented behavior
+    if depth < depth_values[0] or depth > depth_values[-1]:
+        raise ValueError(
+            f"Requested depth {depth:g} m outside database range "
+            f"[{depth_values[0]:g}, {depth_values[-1]:g}] m"
+        )
+    
+    depth_selected = depth_values[np.abs(depth_values - depth).argmin()]
+
+    # Check depth tolerance
+    if abs(depth_selected - depth) > depth_tolerance + 1e-9:
+        raise ValueError(
+            f"Requested depth {depth:g} m: nearest available depth "
+            f"{depth_selected:g} m exceeds tolerance {depth_tolerance:g} m"
+        )
+
+    df = df[df["depth_m"] == depth_selected]
+
+    # Find nearest available radius
+    radius_values = np.sort(df["radius_m"].unique())
+    # To enforce the documented behavior
+    if radius < radius_values[0] or radius > radius_values[-1]:
+        raise ValueError(
+            f"Requested radius {radius*1e3:g} mm outside database range "
+            f"[{radius_values[0]*1e3:g}, {radius_values[-1]*1e3:g}] mm"
+        )
+
+    radius_selected = radius_values[np.abs(radius_values - radius).argmin()]
+
+    # Check radius tolerance
+    if abs(radius_selected - radius) > radius_tolerance + 1e-12:
+        raise ValueError(
+            f"Requested radius {radius*1e3:g} mm: nearest available radius "
+            f"{radius_selected*1e3:g} mm exceeds tolerance "
+            f"{radius_tolerance*1e3:g} mm"
+        )
+
+    df = df[df["radius_m"] == radius_selected]
+
+    # Sort by frequency
+    df = df.sort_values("frequency_Hz")
+
+    freq_vec = df["frequency_Hz"].to_numpy(dtype=float)
+    f_bs = df["f_bs"].to_numpy(dtype=complex)
+
+    return freq_vec, f_bs
+
+@lru_cache(maxsize=16)
+def _read_bubble_database(filepath):
+    df = pd.read_csv(filepath)
+    df["f_bs"] = df["f_bs"].astype(complex)
+    return df
