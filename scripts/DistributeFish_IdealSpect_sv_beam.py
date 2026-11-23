@@ -31,7 +31,7 @@ import pandas as pd
 from matplotlib.ticker import FormatStrFormatter
 
 from sv_modeling.database import Extract_database_metadata
-from sv_modeling.density import beam_shell_volume, estimate_density
+from sv_modeling.density import beam_shell_volume, estimate_density, band_average
 from sv_modeling.paths import FEMBEM_DIR, TS_DATABASE_150HZ_DIR, output_path
 from sv_modeling.plotting import plot_fish_school, _cone_surface
 from sv_modeling.school import orient_fish, place_fish_beam_shell
@@ -150,7 +150,7 @@ points = place_fish_beam_shell(N, R, DR, beam_half_angle_deg, min_dist, rng)
 # II. Orientation of fish
 # Ranges (deg). Theta: azimuth in XY plane from +X. Phi: angle from +Z.
 theta_range_deg = (-0.001, 0.001)
-phi_range_deg = (75.999, 105.001)
+phi_range_deg = (74.999, 105.001)
 
 # "normal" or "uniform" within the ranges
 orientations, theta, phi = orient_fish(N, theta_range_deg, phi_range_deg, rng, distribution="normal")
@@ -214,12 +214,24 @@ result = coherent_backscatter(points, orientations, df_database, database_dir, O
 freq_vec = result.freq_hz
 p_far = result.p_far
 sigma_bs_fish = result.sigma_bs  # sigma_bs(f) for every fish, shape (N, F)
-
-
+# print('result.incident_angles', result.incident_angles)
+idx_90 = np.argmin(np.abs(result.incident_angles - 90))
+selected_angle = result.incident_angles[idx_90]
+if abs(selected_angle - 90) > 0.5:
+    print(
+        f"WARNING: No incident angle within ±0.5° of 90°. "
+        f"Using the closest available angle: {selected_angle:.2f}°."
+    )
+# plt.plot(result.freq_hz, result.sigma_bs[idx_90,:])
+# plt.title(f'Angle: {result.incident_angles[idx_90]}')
+# plt.show()
 #%% Number density estimation for selected frequency band (flat spectral weighting)
 
-f1 = 20000.0
-f2 = 80000.0
+f1 = 50000.0
+f2 = 90000.0
+
+sigma_bs_fish_90 = band_average(result.sigma_bs[idx_90,:], result.freq_hz, f1, f2, axis=0)
+print('sigma_bs_fish_90', sigma_bs_fish_90)
 
 estimate = estimate_density(result, R, V, (f1, f2))
 svf = estimate.svf  # coherent s_v(f) over all frequencies
@@ -239,6 +251,9 @@ results = {
     "incoherent_density_fish_m3": estimate.incoherent,
     "true_density_fish_m3": estimate.true,
     "coherent_true_ratio": estimate.coherent / estimate.true,
+    "svf_coh_bandaverage": estimate.sv_coherent,
+    "sigma_bs_mean": estimate.sigma_bs_mean,
+    "sigma_bs_fish_90": sigma_bs_fish_90,
 }
 
 df_results = pd.DataFrame([results])
@@ -262,7 +277,7 @@ fig = plt.figure(figsize=(12, 5))
 # 1. Theta histogram
 ax1 = fig.add_subplot(231)
 pos = ax1.get_position()
-ax1.set_position([pos.x0-0.05, pos.y0 + 0.05, pos.width * 0.8, pos.height * 0.5])
+ax1.set_position([pos.x0-0.05, pos.y0 + 0.1, pos.width * 0.8, pos.height * 0.6])
 ax1.hist(np.degrees(theta), bins=30, density=False, alpha=0.6, color="skyblue", edgecolor="black")
 ax1.set_xlabel(r"$\theta$ (deg)", fontsize=12)
 ax1.set_ylabel("Number of fish", fontsize=12)
@@ -271,7 +286,7 @@ ax1.set_title("Azimuth distribution")
 # 2. Phi histogram
 ax2 = fig.add_subplot(232)
 pos = ax2.get_position()
-ax2.set_position([pos.x0-0.05, pos.y0 + 0.05, pos.width * 0.8, pos.height * 0.5])
+ax2.set_position([pos.x0-0.05, pos.y0 + 0.1, pos.width * 0.8, pos.height * 0.6])
 ax2.hist(np.degrees(phi), bins=30, density=False, alpha=0.6, color="skyblue", edgecolor="black")
 ax2.set_xlabel(r"$\phi$ (deg)", fontsize=12)
 ax2.set_ylabel("Number of fish", fontsize=12)
@@ -280,7 +295,7 @@ ax2.set_title("Polar angle distribution")
 # 3. Fish school in 3D
 ax3 = fig.add_subplot(233, projection="3d")
 pos = ax3.get_position()
-ax3.set_position([pos.x0-0.15, pos.y0-0.5, pos.width*2.6, pos.height*2.8])
+ax3.set_position([pos.x0-0.15, pos.y0-0.5, pos.width*2.8, pos.height*2.9])
 plot_fish_school(points, orientations, ax3, length=0.3, margin=1.1, view=(12, -55), invert_z=True)
 
 # Acoustic beam
@@ -320,12 +335,12 @@ ax3.tick_params(axis="z", labelsize=10)
 # 3. sv(f)
 ax4 = fig.add_subplot(234)
 pos = ax4.get_position()
-ax4.set_position([pos.x0-0.04, pos.y0 - 0.00, pos.width * 2.1, pos.height * 0.8])
+ax4.set_position([pos.x0-0.05, pos.y0 - 0.00, pos.width * 2.1, pos.height * 1.1])
 # ax4.plot(freq_vec/1000,svf, color =[0,0,0])
 ax4.plot(freq_vec/1e3, 10*np.log10(np.maximum(svf, 1e-300)), label="Coherent")
 ax4.set_xlabel("Frequency (kHz)", fontsize=12)
 ax4.set_ylabel(r'$s_v\;(\mathrm{m}^2\,\mathrm{m}^{-3})$', fontsize=12)
-
+ax4.grid(True, axis="both", linestyle="--", linewidth=0.7, alpha=0.5)
 
 ax1.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
 ax2.xaxis.set_major_formatter(FormatStrFormatter('%.1f'))
