@@ -142,7 +142,7 @@ orientations = angles_to_unit_vectors(THETA, PHI)
 
 
 # Plot the fish school of N fish
-plot_fish_school(points, orientations)
+plot_fish_school(points, orientations, length=0.1, linewidth = 2)
 plt.savefig(output_path("Plot_"+os.path.splitext(FEM_BEM_files[0])[0]+".png"), dpi=300, bbox_inches='tight')  # PNG
 plt.show() 
 
@@ -168,6 +168,7 @@ smoothed = savgol_filter(Total_p_TS, window_length=window_L, polyorder=3)
 # plt.plot(freq, smoothed, color = [1, 0, 0], dashes = [3,0], linewidth = 3)
 
 plt.xlabel(' Frequency (kHz)', fontsize = 12)
+plt.ylabel(' $10log_{10}(p_{tot}^2)$ (dB)', fontsize = 12)
 plt.legend(
     loc='upper right',     # location of legend
     fontsize=12,          # font size

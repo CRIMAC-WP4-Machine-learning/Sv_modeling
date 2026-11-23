@@ -127,7 +127,7 @@ def coherent_backscatter(
 
         distances[ii] = np.linalg.norm(observation_point - points[ii])
         k = 2 * np.pi * freq_hz / sound_speed
-        p_far += f_bs_ii / distances[ii] ** 2 * np.exp(-1j * 2 * k * distances[ii])
+        p_far += (f_bs_ii / distances[ii] ** 2) * np.exp(-1j * 2 * k * distances[ii])
         sigma_bs[ii] = np.abs(f_bs_ii) ** 2
 
     return BackscatterResult(freq_hz, p_far, sigma_bs, distances, incident_angles, filenames)
