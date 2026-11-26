@@ -7,6 +7,7 @@ Python-based simulation of acoustic backscattering from fish aggregations, inclu
 ```text
 Sv_modeling/
 ├── src/sv_modeling/          # Installable package (shared code)
+│   ├── config.py             # Loading and validation of YAML run configurations
 │   ├── database.py           # TS(f)/f_bs(f) database: metadata, closest-file lookup, loading
 │   ├── fembem.py             # Reader for FEM/BEM (COMSOL) TS exports
 │   ├── geometry.py           # Incident angle between fish axis and echosounder
@@ -18,6 +19,7 @@ Sv_modeling/
 │   ├── DistributeFish_sv.py                   # Random school, coherent superposition
 │   ├── DistributeFish_Pbs_compareCOMSOL.py    # Fixed targets vs FEM/BEM solution
 │   └── DistributeFish_IdealSpect_sv_beam.py   # Fish in a beam: coherent/incoherent s_v and density
+├── configs/                  # YAML parameters, one default file per script
 ├── data/                     # Input data - NOT in git, see Data
 │   ├── fembem/               # FEM/BEM (COMSOL) TS results and parameter files
 │   └── ts_database/          # Modelled TS(f) and f_bs(f) (CSV)
@@ -77,10 +79,32 @@ Each TS-database CSV has columns `Freq_kHz`, `TS` (dB) and complex `f_bs`. Model
 ## Running the simulations
 
 ```bash
-uv run python scripts/<script_name>.py
+uv run python scripts/<script_name>.py                              # uses configs/<script_name>.yaml
+uv run python scripts/<script_name>.py --config configs/my_run.yaml  # uses another parameter file
 ```
 
-Data paths are resolved relative to the repository (see `src/sv_modeling/paths.py`), so scripts can be run from any working directory. Figures are written to `outputs/`.
+Data paths are resolved relative to the repository (see `src/sv_modeling/paths.py`), so scripts can be run from any working directory. Figures are written to `outputs/`, together with a copy of the config used (`outputs/used_<config name>.yaml`).
+
+### Parameters (configs/)
+
+Simulation parameters (school geometry, number of targets, orientation, transmit signal, frequency band, bubble properties, ...) are read from a YAML file. Each script has a default file in `configs/` with the same name as the script. To try other settings, copy the default file, edit it and pass it with `--config`:
+
+```yaml
+seed: 42                    # integer for a reproducible school; null = new school each run
+
+school:
+  geometry: beam_shell      # spheroid | beam_shell | fixed
+  n_targets: 200
+  mean_range_m: 50.0
+  thickness_m: 1
+  min_dist_m: 0.1
+```
+
+Units are part of the key names (`_m`, `_hz`, `_deg`, `_ms`). The file is validated when it is loaded (`sv_modeling.config`): unknown keys, missing keys and wrong types stop the script with a message naming the key, so a typo is never silently ignored.
+
+YAML tip: PyYAML reads `5e4` as text. Write `5.0e+4` or `50000` instead.
+
+When running a script cell by cell in Spyder or VS Code, the default config is used. Change it, or select another one with `runfile(..., args="--config configs/my_run.yaml")` in Spyder.
 
 ## Using the package
 

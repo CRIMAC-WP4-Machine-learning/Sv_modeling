@@ -1,0 +1,34 @@
+# Parameters for scripts/DistributeFish_sv.py
+# Coordinates: z is up, so targets below the echosounder have negative z.
+
+description: Random school of 200 fish in an oblate spheroid at 50 m, coherent superposition
+seed: null                          # integer (e.g. 42) for a reproducible school; null = new school each run
+
+transmit_signal:                    # FM sweep; plotted and its energy printed, not used in the backscatter sum
+  effective_duration_ms: 2.048      # sweep duration (2 x 1.024 ms)
+  center_time_ms: 10.24             # 10 x 1.024 ms
+  total_duration_ms: 12.288         # whole signal incl. zeros (12 x 1.024 ms)
+  sampling_rate_hz: 8388608         # 512*512*16*2
+  f_start_hz: 160000
+  f_end_hz: 260000
+  ramp_exponent: 25                 # fast ramping; smaller value = slower ramp
+
+echosounder:
+  position_m: [0.0, 0.0, 0.0]
+
+school:
+  geometry: spheroid                # spheroid | beam_shell | fixed
+  n_targets: 200
+  semi_axis_horizontal_m: 2.0
+  semi_axis_vertical_m: 0.6
+  depth_m: 50                       # school centre at z = -depth_m
+  min_dist_m: 0.1                   # minimum distance between fish
+
+orientation:
+  distribution: normal              # normal | uniform
+  theta_range_deg: [-0.01, 0.01]    # azimuth in XY plane from +X
+  phi_range_deg: [89.99, 90.01]     # polar angle from +Z; 90 = horizontal
+
+fembem:
+  # File in data/fembem/. Its name is also used for the output figure names.
+  file: FEM_BEM_II_FourTargets_TS_a1cm_b4mm_rho7p34_90deg_D1_0p1m_D2_0p25m_D3_z0p25m_x0p25m.txt

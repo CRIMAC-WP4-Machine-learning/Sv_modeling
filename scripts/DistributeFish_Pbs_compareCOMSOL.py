@@ -4,7 +4,9 @@ the FEM/BEM (COMSOL) solution for the same geometry.
 
 Run from anywhere, e.g. from the repository root:
     uv run python scripts/DistributeFish_Pbs_compareCOMSOL.py
+    uv run python scripts/DistributeFish_Pbs_compareCOMSOL.py --config path/to/other.yaml
 
+Parameters are read from configs/DistributeFish_Pbs_compareCOMSOL.yaml unless --config is given.
 Figures are written to outputs/.
 """
 import os
@@ -13,6 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.signal import savgol_filter
 
+from sv_modeling.config import FixedSchool, config_from_cli
 from sv_modeling.database import Extract_database_metadata
 from sv_modeling.fembem import func_FEM_BEM
 from sv_modeling.paths import FEMBEM_DIR, TS_DATABASE_150HZ_DIR, output_path
@@ -21,6 +24,11 @@ from sv_modeling.school import angles_to_unit_vectors
 from sv_modeling.scattering import coherent_backscatter, total_ts
 from sv_modeling.signals import func_Gen_SweepSig_Explicit
 from sv_modeling.spectrum import ESD_BKH
+
+#%% Configuration (configs/DistributeFish_Pbs_compareCOMSOL.yaml or --config)
+cfg = config_from_cli("DistributeFish_Pbs_compareCOMSOL.yaml", description=__doc__)
+cfg.require("transmit_signal", "echosounder", "fembem")
+school = cfg.school_as(FixedSchool)
 
 #%% Directories and databases
 # Database directory containing csv files with TS(f) and f_bs(f):
@@ -35,14 +43,15 @@ print('FEM_BEM_dir: ', FEM_BEM_dir)
 df_database = Extract_database_metadata(database_dir)
 #%%====================================================
 # Transmit signal
-T_effectiveDuration=2*1.024*1E-3 # Sweep duration (sec)
-T_center=10*1.024*1E-3
-T_whole=12*1.024*1E-3     # Whole time signal with zeros (sec)
+tx = cfg.transmit_signal
+T_effectiveDuration = tx.effective_duration_ms * 1e-3  # Sweep duration (sec)
+T_center = tx.center_time_ms * 1e-3
+T_whole = tx.total_duration_ms * 1e-3  # Whole time signal with zeros (sec)
 
-Fs=512*512*16*2 # Sampling rate (Hz)
-F_start=160000  # Start frequency (Hz)
-F_end=260000    # End frequency (Hz)
-mexpo=25        # Fast ramping. For slow ramping select smaller value
+Fs = tx.sampling_rate_hz  # Sampling rate (Hz)
+F_start = tx.f_start_hz  # Start frequency (Hz)
+F_end = tx.f_end_hz  # End frequency (Hz)
+mexpo = tx.ramp_exponent  # Fast ramping. For slow ramping select smaller value
 
 [t_vec,p_vec]=func_Gen_SweepSig_Explicit(T_whole,T_center,T_effectiveDuration,Fs,F_start,F_end,mexpo)
 dt = np.mean(np.diff(t_vec))
@@ -80,7 +89,7 @@ print(f'E_time={E_time:.6e}, E_freq={E_freq:.6e}')
 #%% ##====================================================
 
 
-FEM_BEM_files = ['FEM_BEM_II_FourTargets_TS_a1cm_b4mm_rho7p34_90deg_D1_0p1m_D2_0p25m_D3_z0p25m_x0p25m.txt']
+FEM_BEM_files = [cfg.fembem.file]
 
 [f_bem, TS_bem] = func_FEM_BEM(FEM_BEM_dir, FEM_BEM_files[0])
 #====================================
@@ -110,7 +119,7 @@ FEM_BEM_files = ['FEM_BEM_II_FourTargets_TS_a1cm_b4mm_rho7p34_90deg_D1_0p1m_D2_0
 
 
 #%% main part
-Observation_point = np.array([0, 0, 0]) # Echosounder location
+Observation_point = np.array(cfg.echosounder.position_m)  # Echosounder location
 
 # |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 # Example: place N points (fish location) with no overlap in a prolate or oblate spheroid
@@ -126,17 +135,11 @@ Observation_point = np.array([0, 0, 0]) # Echosounder location
 # |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 #                       Test case for two fish:  
 # ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||| 
-Average_school_Depth = 50  # m
-points = np.array([
-    [0, 0, -Average_school_Depth],
-    [0, 0, -Average_school_Depth - 0.1],
-    [0, 0, -Average_school_Depth - 0.25],
-    [0, -0.25, -Average_school_Depth - 0.25],
-], dtype=float)
-
-# Orientation: all horizontal along +X
-PHI = np.radians([90.0, 90.0, 90.0, 90.0])
-THETA = np.radians([0.0, 0.0, 0.0, 0.0])
+# Target positions and orientations from the config (school.geometry: fixed).
+# They must match the geometry of the FEM-BEM file being compared against.
+points = np.array(school.points_m, dtype=float)
+PHI = np.radians(school.phi_deg)
+THETA = np.radians(school.theta_deg)
 orientations = angles_to_unit_vectors(THETA, PHI)
 # # ====================================================
 

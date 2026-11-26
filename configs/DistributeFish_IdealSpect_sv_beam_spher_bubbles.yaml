@@ -1,0 +1,30 @@
+# Parameters for scripts/DistributeFish_IdealSpect_sv_beam_spher_bubbles.py
+# Coordinates: +Z downward (beam axis).
+
+description: 500 CO2 bubbles in a 1 m thick beam shell at 55 m range
+seed: null                          # integer (e.g. 42) for a reproducible cloud; null = new cloud each run
+
+echosounder:
+  position_m: [0.0, 0.0, 0.0]
+  beam_direction: [0.0, 0.0, 1.0]   # +Z downward
+  beam_half_angle_deg: 3.5
+
+school:
+  geometry: beam_shell
+  n_targets: 500
+  mean_range_m: 55.0
+  thickness_m: 1.0
+  min_dist_m: 0.002                 # minimum separation between bubbles
+
+bubbles:
+  # Needs a matching library CSV in data/ts_database/spherical for this gas,
+  # depth range and radius range (see sphere_backscatt_library_generation.yaml).
+  gas: CO2
+  radius_min_m: 0.0005
+  radius_max_m: 0.0020
+  radius_resolution_m: 0.0001
+  sound_speed_m_s: 1500.0
+  transducer_depth_m: 0.0           # transducer depth below the sea surface
+
+analysis:
+  band_hz: [45000, 90000]           # band for the density estimate

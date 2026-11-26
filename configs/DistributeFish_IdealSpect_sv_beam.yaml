@@ -1,0 +1,25 @@
+# Parameters for scripts/DistributeFish_IdealSpect_sv_beam.py
+# Coordinates: +X alongship, +Y athwartship, +Z downward (beam axis).
+
+description: 200 fish in a 1 m thick beam shell at 50 m range, near-broadside orientation
+seed: null                          # integer (e.g. 42) for a reproducible school; null = new school each run
+
+echosounder:
+  position_m: [0.0, 0.0, 0.0]
+  beam_direction: [0.0, 0.0, 1.0]   # +Z downward
+  beam_half_angle_deg: 3.5
+
+school:
+  geometry: beam_shell              # spheroid | beam_shell | fixed
+  n_targets: 200
+  mean_range_m: 50.0
+  thickness_m: 1
+  min_dist_m: 0.1                   # minimum distance between fish
+
+orientation:
+  distribution: normal              # normal | uniform
+  theta_range_deg: [-0.001, 0.001]  # azimuth in XY plane from +X
+  phi_range_deg: [74.999, 105.001]  # polar angle from +Z; 90 = horizontal
+
+analysis:
+  band_hz: [50000.0, 90000.0]       # band for the sigma_bs average and density estimate

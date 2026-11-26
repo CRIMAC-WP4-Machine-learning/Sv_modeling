@@ -7,6 +7,12 @@ IF NOT, run sphere_backscatt_library_generation.py first for Gas content (e.g. O
 at required depth and size distribution
 
 Results are saved to data/ts_database/spherical/.
+
+Run from anywhere, e.g. from the repository root:
+    uv run python scripts/sphere_backscatt_library_generation.py
+    uv run python scripts/sphere_backscatt_library_generation.py --config path/to/other.yaml
+
+Parameters are read from configs/sphere_backscatt_library_generation.yaml unless --config is given.
 """
 
 import numpy as np
@@ -14,29 +20,34 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from sv_modeling.f_bs_sphere import func_formfunc_FluidFiledSphere_Rinf
+from sv_modeling.config import config_from_cli
 from sv_modeling.equations_of_state import func_VanDerWaals
 from sv_modeling.paths import TS_DATABASE_SPHERE_DIR
 from sv_modeling.gas_sound_speed import func_c_gas
 
 
-#%% Inputs
-Bubble_Depth_start = 50  # m
-Bubble_Depth_end = 60  # m
-Depth_resolution = 0.05  # m
+#%% Inputs (configs/sphere_backscatt_library_generation.yaml or --config)
+cfg = config_from_cli("sphere_backscatt_library_generation.yaml", description=__doc__, copy_to_outputs=False)
+cfg.require("bubbles", "bubble_library")
+bub, lib = cfg.bubbles, cfg.bubble_library
 
-freq_start = 45000  # Hz
-freq_end = 90000  # Hz
-freq_resolution = 100  # Hz
+Bubble_Depth_start = lib.depth_start_m  # m
+Bubble_Depth_end = lib.depth_end_m  # m
+Depth_resolution = lib.depth_resolution_m  # m
 
-R_bubble_min = 0.0005  # m
-R_bubble_max = 0.002  # m
-R_bubble_resolution = 0.0001  # m
+freq_start = lib.freq_start_hz  # Hz
+freq_end = lib.freq_end_hz  # Hz
+freq_resolution = lib.freq_resolution_hz  # Hz
 
-Gas = "CH4"
-P0 = 1e5
-ro_w = 1027  # kg/m^3
-c_w = 1500  # m/s
-Temperature_C = 10  # Celsius
+R_bubble_min = bub.radius_min_m  # m
+R_bubble_max = bub.radius_max_m  # m
+R_bubble_resolution = bub.radius_resolution_m  # m
+
+Gas = bub.gas
+P0 = lib.surface_pressure_pa
+ro_w = lib.water_density_kg_m3  # kg/m^3
+c_w = bub.sound_speed_m_s  # m/s
+Temperature_C = lib.temperature_c  # Celsius
 
 
 #%% Initial calculations

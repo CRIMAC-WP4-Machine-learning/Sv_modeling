@@ -1,0 +1,22 @@
+# Parameters for scripts/sphere_backscatt_library_generation.py
+# Output: data/ts_database/spherical/<gas>_depth<start>-<end>m_R<min>-<max>mm.csv
+
+description: CH4 bubble f_bs library, 50-60 m depth, 0.5-2 mm radius, 45-90 kHz
+
+bubbles:
+  gas: CH4                          # note: DistributeFish_..._spher_bubbles.yaml uses CO2
+  radius_min_m: 0.0005
+  radius_max_m: 0.002
+  radius_resolution_m: 0.0001
+  sound_speed_m_s: 1500
+
+bubble_library:
+  depth_start_m: 50
+  depth_end_m: 60
+  depth_resolution_m: 0.05
+  freq_start_hz: 45000
+  freq_end_hz: 90000
+  freq_resolution_hz: 100
+  surface_pressure_pa: 1.0e+5       # write exponents with a decimal point and sign for YAML
+  water_density_kg_m3: 1027
+  temperature_c: 10

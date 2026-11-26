@@ -4,7 +4,9 @@ spheroid at ~50 m depth). Optionally compare with FEM/BEM results.
 
 Run from anywhere, e.g. from the repository root:
     uv run python scripts/DistributeFish_sv.py
+    uv run python scripts/DistributeFish_sv.py --config path/to/other.yaml
 
+Parameters are read from configs/DistributeFish_sv.yaml unless --config is given.
 Figures are written to outputs/.
 """
 import os
@@ -13,6 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.signal import savgol_filter
 
+from sv_modeling.config import SpheroidSchool, config_from_cli
 from sv_modeling.database import Extract_database_metadata
 from sv_modeling.fembem import func_FEM_BEM
 from sv_modeling.paths import FEMBEM_DIR, TS_DATABASE_150HZ_DIR, output_path
@@ -21,6 +24,11 @@ from sv_modeling.school import orient_fish, place_fish_spheroid
 from sv_modeling.scattering import coherent_backscatter, total_ts
 from sv_modeling.signals import func_Gen_SweepSig_Explicit
 from sv_modeling.spectrum import ESD_BKH
+
+#%% Configuration (configs/DistributeFish_sv.yaml or --config)
+cfg = config_from_cli("DistributeFish_sv.yaml", description=__doc__)
+cfg.require("transmit_signal", "echosounder", "orientation", "fembem")
+school = cfg.school_as(SpheroidSchool)
 
 #%% Directories and databases
 # Database directory containing csv files with TS(f) and f_bs(f):
@@ -35,14 +43,15 @@ print('FEM_BEM_dir: ', FEM_BEM_dir)
 df_database = Extract_database_metadata(database_dir)
 #%%====================================================
 # Transmit signal
-T_effectiveDuration=2*1.024*1E-3 # Sweep duration (sec)
-T_center=10*1.024*1E-3
-T_whole=12*1.024*1E-3     # Whole time signal with zeros (sec)
+tx = cfg.transmit_signal
+T_effectiveDuration = tx.effective_duration_ms * 1e-3  # Sweep duration (sec)
+T_center = tx.center_time_ms * 1e-3
+T_whole = tx.total_duration_ms * 1e-3  # Whole time signal with zeros (sec)
 
-Fs=512*512*16*2 # Sampling rate (Hz)
-F_start=160000  # Start frequency (Hz)
-F_end=260000    # End frequency (Hz)
-mexpo=25        # Fast ramping. For slow ramping select smaller value
+Fs = tx.sampling_rate_hz  # Sampling rate (Hz)
+F_start = tx.f_start_hz  # Start frequency (Hz)
+F_end = tx.f_end_hz  # End frequency (Hz)
+mexpo = tx.ramp_exponent  # Fast ramping. For slow ramping select smaller value
 
 [t_vec,p_vec]=func_Gen_SweepSig_Explicit(T_whole,T_center,T_effectiveDuration,Fs,F_start,F_end,mexpo)
 dt = np.mean(np.diff(t_vec))
@@ -81,7 +90,7 @@ print(f'E_freq={E_freq:.6e}')
 #%% ##====================================================
 
 
-FEM_BEM_files = ['FEM_BEM_II_FourTargets_TS_a1cm_b4mm_rho7p34_90deg_D1_0p1m_D2_0p25m_D3_z0p25m_x0p25m.txt']
+FEM_BEM_files = [cfg.fembem.file]
 
 [f_bem, TS_bem] = func_FEM_BEM(FEM_BEM_dir, FEM_BEM_files[0])
 #====================================
@@ -111,28 +120,27 @@ FEM_BEM_files = ['FEM_BEM_II_FourTargets_TS_a1cm_b4mm_rho7p34_90deg_D1_0p1m_D2_0
 
 
 #%% main part
-Observation_point = np.array([0, 0, 0]) # Echosounder location
+Observation_point = np.array(cfg.echosounder.position_m)  # Echosounder location
 
 # |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 # Example: place N points (fish location) with no overlap in a prolate or oblate spheroid
 # |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-seed = None  # set an int for a reproducible school
-rng = np.random.default_rng(seed)
+rng = np.random.default_rng(cfg.seed)  # seed: null in the config gives a new school each run
 
-N = 200
-a, b = 2.0, 0.6  # spheroid semi-axes (m): horizontal, vertical
-min_dist = 0.1  # m, minimum distance between fish
-Average_school_Depth = 50  # m
+N = school.n_targets
+a, b = school.semi_axis_horizontal_m, school.semi_axis_vertical_m  # spheroid semi-axes (m): horizontal, vertical
+min_dist = school.min_dist_m  # m, minimum distance between fish
+Average_school_Depth = school.depth_m  # m
 
 # Orientation ranges (deg). Theta: azimuth in XY plane from +X. Phi: angle from +Z.
-theta_range_deg = (-0.01, 0.01)
-phi_range_deg = (89.99, 90.01)
+theta_range_deg = cfg.orientation.theta_range_deg
+phi_range_deg = cfg.orientation.phi_range_deg
 
 # I. Fish positions, no overlap
 points = place_fish_spheroid(N, a, b, Average_school_Depth, min_dist, rng)
 
 # II. Fish orientations ("normal" or "uniform" within the ranges)
-orientations, theta, phi = orient_fish(N, theta_range_deg, phi_range_deg, rng, distribution="normal")
+orientations, theta, phi = orient_fish(N, theta_range_deg, phi_range_deg, rng, distribution=cfg.orientation.distribution)
 
 # Orientation histograms
 plt.hist(np.degrees(theta), bins=30, density=True, alpha=0.6, color='skyblue', edgecolor='black')

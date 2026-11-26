@@ -6,12 +6,20 @@ Bubbles are randomly distributed within a conical beam shell
 between slant ranges R-DR/2 and R+DR/2.
 
 Complex f_bs(f) spectra are read from spherical CSV databases.
+
+Run from anywhere, e.g. from the repository root:
+    uv run python scripts/DistributeFish_IdealSpect_sv_beam_spher_bubbles.py
+    uv run python scripts/DistributeFish_IdealSpect_sv_beam_spher_bubbles.py --config path/to/other.yaml
+
+Parameters are read from configs/DistributeFish_IdealSpect_sv_beam_spher_bubbles.yaml unless --config is given.
+Figures are written to outputs/.
 """
 
 #%% Imports
 import numpy as np
 import matplotlib.pyplot as plt
 
+from sv_modeling.config import BeamShellSchool, config_from_cli
 from sv_modeling.paths import TS_DATABASE_SPHERE_DIR, output_path
 from sv_modeling.plotting import plot_bubble_cloud
 from sv_modeling.density import  estimate_density_sphericalbubbles, beam_shell_volume
@@ -22,30 +30,34 @@ from sv_modeling.scattering import coherent_backscatter_sphericalbubbles
 #%% 1. Simulation parameters 
 
 #======================================================
-Observation_point = np.array([0.0, 0.0, 0.0])
+# Configuration (configs/DistributeFish_IdealSpect_sv_beam_spher_bubbles.yaml or --config)
+cfg = config_from_cli("DistributeFish_IdealSpect_sv_beam_spher_bubbles.yaml", description=__doc__)
+cfg.require("echosounder.beam_direction", "echosounder.beam_half_angle_deg", "bubbles", "analysis")
+school = cfg.school_as(BeamShellSchool)
+bub = cfg.bubbles
 
-Gas = "CO2"
+Observation_point = np.array(cfg.echosounder.position_m, dtype=float)
 
-N = 500
-# seed = 42
-# rng = np.random.default_rng(seed)
-rng = np.random.default_rng()
+Gas = bub.gas
 
-min_dist = 0.002  # Minimum separation between bubbles (m)
+N = school.n_targets
+rng = np.random.default_rng(cfg.seed)  # seed: null in the config gives a new cloud each run
 
-R = 55.0          # Mean slant range (m)
-DR = 1.0          # Slant-range shell thickness (m)
+min_dist = school.min_dist_m  # Minimum separation between bubbles (m)
 
-transducer_depth = 0.0  # Depth below sea surface (m)
+R = school.mean_range_m  # Mean slant range (m)
+DR = school.thickness_m  # Slant-range shell thickness (m)
 
-beam_half_angle_deg = 3.5
+transducer_depth = bub.transducer_depth_m  # Depth below sea surface (m)
+
+beam_half_angle_deg = cfg.echosounder.beam_half_angle_deg
 beam_half_angle = np.deg2rad(beam_half_angle_deg)
 
-c_w = 1500.0
+c_w = bub.sound_speed_m_s
 
-R_bubble_min = 0.0005       # m
-R_bubble_max = 0.0020       # m
-R_bubble_resolution = 0.0001  # m
+R_bubble_min = bub.radius_min_m  # m
+R_bubble_max = bub.radius_max_m  # m
+R_bubble_resolution = bub.radius_resolution_m  # m
 #======================================================
 
 # Generate targets uniformly in the circular conical shell
@@ -93,13 +105,13 @@ freq_hz, p_far, sigma_bs, distances = coherent_backscatter_sphericalbubbles(
     database_dir=TS_DATABASE_SPHERE_DIR,
     gas=Gas,
     observation_point=Observation_point,
-    sound_speed=c_w
+    sound_speed=c_w,
+    transducer_depth=transducer_depth,
 )
 
 #%% 3. Estimate bubble density
 
-f1 = 45000
-f2 = 90000
+f1, f2 = cfg.analysis.band_hz
 
 estimate = estimate_density_sphericalbubbles(
     freq_hz, p_far, sigma_bs, distances, R, V, (f1, f2)
@@ -123,7 +135,7 @@ fig = plt.figure(figsize=(16, 5))
 # 3D bubble cloud
 ax1 = fig.add_subplot(131, projection="3d")
 plot_bubble_cloud(points, bubble_radii, source=Observation_point,
-                  source_direction=(0, 0, 1), beam_half_angle_deg=beam_half_angle_deg,
+                  source_direction=cfg.echosounder.beam_direction, beam_half_angle_deg=beam_half_angle_deg,
                   ax=ax1, margin=1.1, view=(15, -55), invert_z=True, size_scale=2)
 
 # Bubble radius distribution
