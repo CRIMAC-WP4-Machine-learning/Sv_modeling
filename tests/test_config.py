@@ -63,6 +63,8 @@ def test_school_geometry_selects_class(tmp_path):
     assert cfg.school_as(BeamShellSchool).n_targets == 10
     with pytest.raises(ConfigError, match="school.geometry: spheroid"):
         cfg.school_as(SpheroidSchool)
+    with pytest.raises(ConfigError, match="school.geometry: spheroid or fixed"):
+        cfg.school_as(SpheroidSchool, FixedSchool)
 
 
 def test_lists_become_tuples(tmp_path):
@@ -154,11 +156,11 @@ def test_require_checks_dotted_names(tmp_path):
 
 def test_config_from_cli_uses_config_argument(tmp_path):
     path = write(tmp_path, "description: from the command line\n")
-    cfg = config_from_cli("DistributeFish_sv.yaml", argv=["--config", str(path)], copy_to_outputs=False)
+    cfg = config_from_cli("DistributeFish.yaml", argv=["--config", str(path)], copy_to_outputs=False)
     assert cfg.description == "from the command line"
 
 
 def test_config_from_cli_default_and_unknown_args():
     # unknown arguments (e.g. from Spyder/IPython) are ignored
-    cfg = config_from_cli("DistributeFish_sv.yaml", argv=["-f", "kernel.json"], copy_to_outputs=False)
-    assert cfg.path == (CONFIG_DIR / "DistributeFish_sv.yaml").resolve()
+    cfg = config_from_cli("DistributeFish.yaml", argv=["-f", "kernel.json"], copy_to_outputs=False)
+    assert cfg.path == (CONFIG_DIR / "DistributeFish.yaml").resolve()

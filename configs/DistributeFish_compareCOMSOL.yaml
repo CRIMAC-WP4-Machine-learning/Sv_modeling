@@ -1,8 +1,8 @@
-# Parameters for scripts/DistributeFish_sv_orientation.py
+# Parameters for scripts/DistributeFish.py (fixed targets compared with COMSOL)
+#   uv run python scripts/DistributeFish.py --config configs/DistributeFish_compareCOMSOL.yaml
 # Coordinates: z is up, so targets below the echosounder have negative z.
 
-description: Random school of 200 fish in an oblate spheroid at 50 m, with beam and orientation plots
-seed: null                          # integer (e.g. 42) for a reproducible school; null = new school each run
+description: Fixed 4-target configuration at 50 m compared with the FEM-BEM (COMSOL) solution
 
 transmit_signal:                    # FM sweep; plotted and its energy printed, not used in the backscatter sum
   effective_duration_ms: 2.048      # sweep duration (2 x 1.024 ms)
@@ -19,18 +19,16 @@ echosounder:
   beam_half_angle_deg: 3.5          # used for plotting only
 
 school:
-  geometry: spheroid                # spheroid | beam_shell | fixed
-  n_targets: 200
-  semi_axis_horizontal_m: 2.0
-  semi_axis_vertical_m: 0.6
-  depth_m: 50                       # school centre at z = -depth_m
-  min_dist_m: 0.1                   # minimum distance between fish
-
-orientation:
-  distribution: normal              # normal | uniform
-  theta_range_deg: [-0.01, 0.01]    # azimuth in XY plane from +X
-  phi_range_deg: [89.99, 90.01]     # polar angle from +Z; 90 = horizontal
+  geometry: fixed
+  # Must match the geometry the FEM-BEM file was computed for.
+  points_m:
+    - [0.0, 0.0, -50.0]
+    - [0.0, 0.0, -50.1]
+    - [0.0, 0.0, -50.25]
+    - [0.0, -0.25, -50.25]
+  theta_deg: [0.0, 0.0, 0.0, 0.0]   # azimuth in XY plane from +X
+  phi_deg: [90.0, 90.0, 90.0, 90.0] # polar angle from +Z; all horizontal along +X
 
 fembem:
-  # File in data/fembem/. Its name is also used for the output figure names.
+  # FEM-BEM TS(f) in data/fembem/, plotted together with the superposition result
   file: FEM_BEM_II_FourTargets_TS_a1cm_b4mm_rho7p34_90deg_D1_0p1m_D2_0p25m_D3_z0p25m_x0p25m.txt

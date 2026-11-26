@@ -16,10 +16,11 @@ Sv_modeling/
 │   ├── signals.py            # Transmit sweep signal
 │   └── spectrum.py           # Energy spectral density
 ├── scripts/                  # Simulation and analysis entry points
-│   ├── DistributeFish_sv.py                   # Random school, coherent superposition
-│   ├── DistributeFish_Pbs_compareCOMSOL.py    # Fixed targets vs FEM/BEM solution
-│   └── DistributeFish_IdealSpect_sv_beam.py   # Fish in a beam: coherent/incoherent s_v and density
-├── configs/                  # YAML parameters, one default file per script
+│   ├── DistributeFish.py                      # Coherent superposition: random school or fixed targets, optional FEM/BEM comparison
+│   ├── DistributeFish_IdealSpect_sv_beam.py   # Fish in a beam: coherent/incoherent s_v and density
+│   ├── DistributeFish_IdealSpect_sv_beam_spher_bubbles.py  # Gas bubbles in a beam: s_v and density
+│   └── sphere_backscatt_library_generation.py # Generates the bubble f_bs library
+├── configs/                  # YAML parameters, one default file per script (+ extra runs)
 ├── data/                     # Input data - NOT in git, see Data
 │   ├── fembem/               # FEM/BEM (COMSOL) TS results and parameter files
 │   └── ts_database/          # Modelled TS(f) and f_bs(f) (CSV)
@@ -66,7 +67,7 @@ Input data is not stored in git (`data/` is git-ignored). Before running the scr
 ```text
 data/
 ├── fembem/                  # FEM/BEM (COMSOL) TS exports (*.txt + *_Param.txt), ~1.6 MB
-│                            #   used by DistributeFish_sv.py and DistributeFish_Pbs_compareCOMSOL.py
+│                            #   used by DistributeFish.py (configs with a fembem section)
 └── ts_database/
     ├── 150Hz/               # 18 CSV files, ~0.9 MB - used by all scripts
     └── 1-260Khz/            # optional, not used by the scripts yet
@@ -98,6 +99,13 @@ school:
   mean_range_m: 50.0
   thickness_m: 1
   min_dist_m: 0.1
+```
+
+`DistributeFish.py` covers several cases through its config:
+
+```bash
+uv run python scripts/DistributeFish.py                                                   # random school in a spheroid
+uv run python scripts/DistributeFish.py --config configs/DistributeFish_compareCOMSOL.yaml  # 4 fixed targets vs FEM/BEM
 ```
 
 Units are part of the key names (`_m`, `_hz`, `_deg`, `_ms`). The file is validated when it is loaded (`sv_modeling.config`): unknown keys, missing keys and wrong types stop the script with a message naming the key, so a typo is never silently ignored.

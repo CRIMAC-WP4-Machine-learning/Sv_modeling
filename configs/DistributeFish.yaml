@@ -1,4 +1,4 @@
-# Parameters for scripts/DistributeFish_sv.py
+# Parameters for scripts/DistributeFish.py (random school in a spheroid)
 # Coordinates: z is up, so targets below the echosounder have negative z.
 
 description: Random school of 200 fish in an oblate spheroid at 50 m, coherent superposition
@@ -15,6 +15,8 @@ transmit_signal:                    # FM sweep; plotted and its energy printed, 
 
 echosounder:
   position_m: [0.0, 0.0, 0.0]
+  beam_direction: [0.0, 0.0, -1.0]  # beam axis, used for plotting only
+  beam_half_angle_deg: 3.5          # used for plotting only
 
 school:
   geometry: spheroid                # spheroid | beam_shell | fixed
@@ -29,6 +31,4 @@ orientation:
   theta_range_deg: [-0.01, 0.01]    # azimuth in XY plane from +X
   phi_range_deg: [89.99, 90.01]     # polar angle from +Z; 90 = horizontal
 
-fembem:
-  # File in data/fembem/. Its name is also used for the output figure names.
-  file: FEM_BEM_II_FourTargets_TS_a1cm_b4mm_rho7p34_90deg_D1_0p1m_D2_0p25m_D3_z0p25m_x0p25m.txt
+# Add a fembem section (see DistributeFish_compareCOMSOL.yaml) to plot a FEM-BEM result as well.

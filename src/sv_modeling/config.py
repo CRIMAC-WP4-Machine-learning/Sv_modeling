@@ -203,11 +203,11 @@ class RunConfig:
         if missing:
             raise ConfigError(f"{self.path.name}: this script needs {', '.join(missing)}")
 
-    def school_as(self, cls: type) -> School:
-        """Return ``school`` if it has the geometry this script needs, else raise ConfigError."""
+    def school_as(self, *classes: type) -> School:
+        """Return ``school`` if it has one of the geometries this script supports, else raise ConfigError."""
         self.require("school")
-        if not isinstance(self.school, cls):
-            wanted = get_args(get_type_hints(cls)["geometry"])[0]
+        if not isinstance(self.school, classes):
+            wanted = " or ".join(get_args(get_type_hints(c)["geometry"])[0] for c in classes)
             raise ConfigError(
                 f"{self.path.name}: this script needs school.geometry: {wanted}, "
                 f"got {self.school.geometry}"
