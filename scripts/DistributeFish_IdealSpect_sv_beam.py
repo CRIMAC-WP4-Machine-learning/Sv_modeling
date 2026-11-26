@@ -21,7 +21,9 @@ Fish incidence angle:
 
 Run from anywhere, e.g. from the repository root:
     uv run python scripts/DistributeFish_IdealSpect_sv_beam.py
+    uv run python scripts/DistributeFish_IdealSpect_sv_beam.py --config path/to/other.yaml
 
+Parameters are read from configs/DistributeFish_IdealSpect_sv_beam.yaml unless --config is given.
 Figures are written to outputs/.
 """
 
@@ -30,6 +32,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.ticker import FormatStrFormatter
 
+from sv_modeling.config import BeamShellSchool, config_from_cli
 from sv_modeling.database import Extract_database_metadata
 from sv_modeling.density import beam_shell_volume, estimate_density, band_average
 from sv_modeling.paths import FEMBEM_DIR, TS_DATABASE_150HZ_DIR, output_path
@@ -38,6 +41,11 @@ from sv_modeling.school import orient_fish, place_fish_beam_shell
 from sv_modeling.scattering import coherent_backscatter
 from sv_modeling.signals import func_Gen_SweepSig_Explicit  # noqa: F401 (used in commented-out block)
 from sv_modeling.spectrum import ESD_BKH  # noqa: F401 (used in commented-out block)
+
+#%% Configuration (configs/DistributeFish_IdealSpect_sv_beam.yaml or --config)
+cfg = config_from_cli("DistributeFish_IdealSpect_sv_beam.yaml", description=__doc__)
+cfg.require("echosounder.beam_direction", "echosounder.beam_half_angle_deg", "orientation", "analysis")
+school = cfg.school_as(BeamShellSchool)
 
 #%% Directories and databases
 # Database directory containing csv files with TS(f) and f_bs(f):
@@ -117,7 +125,7 @@ df_database = Extract_database_metadata(database_dir)
 
 
 #%% main part
-Observation_point = np.array([0, 0, 0]) # Echosounder location
+Observation_point = np.array(cfg.echosounder.position_m)  # Echosounder location
 
 # |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 # Place N points (fish location) with no overlap within Acoustic beam 
@@ -125,16 +133,15 @@ Observation_point = np.array([0, 0, 0]) # Echosounder location
 # |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
 # Parameters
-seed = None  # set an int for a reproducible school
-rng = np.random.default_rng(seed)
+rng = np.random.default_rng(cfg.seed)  # seed: null in the config gives a new school each run
 
-N = 200
-min_dist = 0.1  # m, minimum distance between fish
+N = school.n_targets
+min_dist = school.min_dist_m  # m, minimum distance between fish
 
-School_Mean_range = 50.0  # m
-School_thikness = 1  # m
+School_Mean_range = school.mean_range_m  # m
+School_thikness = school.thickness_m  # m
 
-beam_half_angle_deg = 3.5
+beam_half_angle_deg = cfg.echosounder.beam_half_angle_deg
 beam_half_angle = np.deg2rad(beam_half_angle_deg)
 
 R = School_Mean_range
@@ -149,11 +156,11 @@ points = place_fish_beam_shell(N, R, DR, beam_half_angle_deg, min_dist, rng)
 
 # II. Orientation of fish
 # Ranges (deg). Theta: azimuth in XY plane from +X. Phi: angle from +Z.
-theta_range_deg = (-0.001, 0.001)
-phi_range_deg = (74.999, 105.001)
+theta_range_deg = cfg.orientation.theta_range_deg
+phi_range_deg = cfg.orientation.phi_range_deg
 
 # "normal" or "uniform" within the ranges
-orientations, theta, phi = orient_fish(N, theta_range_deg, phi_range_deg, rng, distribution="normal")
+orientations, theta, phi = orient_fish(N, theta_range_deg, phi_range_deg, rng, distribution=cfg.orientation.distribution)
 
 
 
@@ -227,8 +234,7 @@ if abs(selected_angle - 90) > 0.5:
 # plt.show()
 #%% Number density estimation for selected frequency band (flat spectral weighting)
 
-f1 = 50000.0
-f2 = 90000.0
+f1, f2 = cfg.analysis.band_hz
 
 sigma_bs_fish_90 = band_average(result.sigma_bs[idx_90,:], result.freq_hz, f1, f2, axis=0)
 print('sigma_bs_fish_90', sigma_bs_fish_90)
@@ -299,8 +305,8 @@ ax3.set_position([pos.x0-0.15, pos.y0-0.5, pos.width*2.8, pos.height*2.9])
 plot_fish_school(points, orientations, ax3, length=0.3, margin=1.1, view=(12, -55), invert_z=True)
 
 # Acoustic beam
-source = np.array([0.0, 0.0, 0.0])
-direction = np.array([0.0, 0.0, 1.0])  # +Z downward
+source = np.array(cfg.echosounder.position_m, dtype=float)
+direction = np.array(cfg.echosounder.beam_direction, dtype=float)  # +Z downward
 
 # Draw the cone over the fish-school range interval
 h_min = R - DR / 2
